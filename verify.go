@@ -65,45 +65,35 @@ func (p7 *PKCS7) VerifyWithChainAtTime(truststore *x509.CertPool, currentTime ti
 	return nil
 }
 
-func verifySignature(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, truststore *x509.CertPool, signingTime time.Time) (err error) {
-	signedData := p7.Content
-	if len(signer.AuthenticatedAttributes) > 0 {
-		// TODO(fullsailor): First check the content type match
-		var digest []byte
-		err := unmarshalAttribute(signer.AuthenticatedAttributes, OIDAttributeMessageDigest, &digest)
-		if err != nil {
+func (p7 *PKCS7) VerifyWithCertPools(rootPool, intermediatePool *x509.CertPool, leafCert *x509.Certificate, eku x509.ExtKeyUsage) (err error) {
+	if len(p7.Signers) == 0 {
+		return errors.New("pkcs7: Message has no signers")
+	}
+	for _, signer := range p7.Signers {
+		ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
+		if ee == nil {
+			return errors.New("pkcs7: No certificate for signer")
+		}
+		
+		signingTime := time.Now().UTC()
+		if err := verifySignature(ee, p7, signer, rootPool, signingTime); err != nil {
 			return err
-		}
-		hash, err := getHashForOID(signer.DigestAlgorithm.Algorithm)
-		if err != nil {
-			return err
-		}
-		h := hash.New()
-		h.Write(p7.Content)
-		computed := h.Sum(nil)
-		if subtle.ConstantTimeCompare(digest, computed) != 1 {
-			return &MessageDigestMismatchError{
-				ExpectedDigest: digest,
-				ActualDigest:   computed,
-			}
-		}
-		signedData, err = marshalAttributes(signer.AuthenticatedAttributes)
-		if err != nil {
-			return err
-		}
-		err = unmarshalAttribute(signer.AuthenticatedAttributes, OIDAttributeSigningTime, &signingTime)
-		if err == nil {
-			// signing time found, performing validity check
-			if signingTime.After(ee.NotAfter) || signingTime.Before(ee.NotBefore) {
-				return fmt.Errorf("pkcs7: signing time %q is outside of certificate validity %q to %q",
-					signingTime.Format(time.RFC3339),
-					ee.NotBefore.Format(time.RFC3339),
-					ee.NotAfter.Format(time.RFC3339))
-			}
 		}
 	}
+	return nil
+}
+
+func verifySignature(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, truststore *x509.CertPool, signingTime time.Time) (err error) {
+	signedData, err := verifySignedData(ee, p7.Content, signer, signingTime)
+	if err != nil {
+		return err
+	}
 	if truststore != nil {
-		_, err = verifyCertChain(ee, p7.Certificates, truststore, signingTime)
+		intermediates := x509.NewCertPool()
+		for _, intermediate := range p7.Certificates {
+			intermediates.AddCert(intermediate)
+		}
+		_, err = verifyCertChain(ee, intermediates, truststore, signingTime)
 		if err != nil {
 			return err
 		}
@@ -113,6 +103,65 @@ func verifySignature(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, trustst
 		return err
 	}
 	return ee.CheckSignature(sigalg, signedData, signer.EncryptedDigest)
+}
+
+func verifySignatureWithCertPools(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, intermediatePool *x509.CertPool, truststore *x509.CertPool, signingTime time.Time) (err error) {
+	signedData, err := verifySignedData(ee, p7.Content, signer, signingTime)
+	if err != nil {
+		return err
+	}
+	if truststore != nil && intermediatePool != nil {
+		_, err = verifyCertChain(ee, intermediatePool, truststore, signingTime)
+		if err != nil {
+			return err
+		}
+	}
+	sigalg, err := getSignatureAlgorithm(signer.DigestEncryptionAlgorithm, signer.DigestAlgorithm)
+	if err != nil {
+		return err
+	}
+	return ee.CheckSignature(sigalg, signedData, signer.EncryptedDigest)
+}
+
+func verifySignedData(ee *x509.Certificate, p7Content []byte, signer signerInfo, signingTime time.Time) ([]byte, error) {
+	if len(signer.AuthenticatedAttributes) == 0 {
+		return p7Content, nil
+	}
+	
+	// TODO(fullsailor): First check the content type match
+	var digest []byte
+	err := unmarshalAttribute(signer.AuthenticatedAttributes, OIDAttributeMessageDigest, &digest)
+	if err != nil {
+		return nil, err
+	}
+	hash, err := getHashForOID(signer.DigestAlgorithm.Algorithm)
+	if err != nil {
+		return nil, err
+	}
+	h := hash.New()
+	h.Write(p7Content)
+	computed := h.Sum(nil)
+	if subtle.ConstantTimeCompare(digest, computed) != 1 {
+		return nil, &MessageDigestMismatchError{
+			ExpectedDigest: digest,
+			ActualDigest:   computed,
+		}
+	}
+	signedData, err := marshalAttributes(signer.AuthenticatedAttributes)
+	if err != nil {
+		return nil, err
+	}
+	err = unmarshalAttribute(signer.AuthenticatedAttributes, OIDAttributeSigningTime, &signingTime)
+	if err == nil {
+		// signing time found, performing validity check
+		if signingTime.After(ee.NotAfter) || signingTime.Before(ee.NotBefore) {
+			return nil, fmt.Errorf("pkcs7: signing time %q is outside of certificate validity %q to %q",
+				signingTime.Format(time.RFC3339),
+				ee.NotBefore.Format(time.RFC3339),
+				ee.NotAfter.Format(time.RFC3339))
+		}
+	}
+	return signedData, nil
 }
 
 // GetOnlySigner returns an x509.Certificate for the first signer of the signed
@@ -182,11 +231,7 @@ func parseSignedData(data []byte) (*PKCS7, error) {
 //
 // When verifying chains that may have expired, currentTime can be set to a past date
 // to allow the verification to pass. If unset, currentTime is set to the current UTC time.
-func verifyCertChain(ee *x509.Certificate, certs []*x509.Certificate, truststore *x509.CertPool, currentTime time.Time) (chains [][]*x509.Certificate, err error) {
-	intermediates := x509.NewCertPool()
-	for _, intermediate := range certs {
-		intermediates.AddCert(intermediate)
-	}
+func verifyCertChain(ee *x509.Certificate, intermediates, truststore *x509.CertPool, currentTime time.Time) (chains [][]*x509.Certificate, err error) {
 	verifyOptions := x509.VerifyOptions{
 		Roots:         truststore,
 		Intermediates: intermediates,

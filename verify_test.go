@@ -595,3 +595,7 @@ but that's not what ships are built for.
 	}
 	os.Remove(tmpContentFile.Name()) // clean up
 }
+
+func TestVerifyCertChain(t *testing.T) {
+	
+}
