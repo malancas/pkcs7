@@ -238,6 +238,14 @@ Hg0OMA60
 
 var ApkEcdsaContent = `U2lnbmF0dXJlLVZlcnNpb246IDEuMA0KU0hBLTUxMi1EaWdlc3QtTWFuaWZlc3Q6IFAvVDRqSWtTMjQvNzFxeFE2WW1MeEtNdkRPUUF0WjUxR090dFRzUU9yemhHRQ0KIEpaUGVpWUtyUzZYY090bStYaWlFVC9uS2tYdWVtUVBwZ2RBRzFKUzFnPT0NCkNyZWF0ZWQtQnk6IDEuMCAoQW5kcm9pZCBTaWduQXBrKQ0KDQpOYW1lOiBBbmRyb2lkTWFuaWZlc3QueG1sDQpTSEEtNTEyLURpZ2VzdDogcm9NbWVQZmllYUNQSjFJK2VzMVpsYis0anB2UXowNHZqRWVpL2U0dkN1ald0VVVWSHEzMkNXDQogMUxsOHZiZGMzMCtRc1FlN29ibld4dmhLdXN2K3c1a2c9PQ0KDQpOYW1lOiByZXNvdXJjZXMuYXJzYw0KU0hBLTUxMi1EaWdlc3Q6IG5aYW1aUzlPZTRBRW41cEZaaCtoQ1JFT3krb1N6a3hHdU5YZU0wUFF6WGVBVlVQV3hSVzFPYQ0KIGVLbThRbXdmTmhhaS9HOEcwRUhIbHZEQWdlcy9HUGtBPT0NCg0KTmFtZTogY2xhc3Nlcy5kZXgNClNIQS01MTItRGlnZXN0OiBlbWlDQld2bkVSb0g2N2lCa3EwcUgrdm5tMkpaZDlMWUNEV051N3RNYzJ3bTRtV0dYSUVpWmcNCiBWZkVPV083MFRlZnFjUVhldkNtN2hQMnRpT0U3Y0w5UT09DQoNCg==`
 
+func buildCertPool(certs []*x509.Certificate) *x509.CertPool {
+	pool := x509.NewCertPool()
+	for _, cert := range certs {
+		pool.AddCert(cert)
+	}
+	return pool
+}
+
 func TestVerifyFirefoxAddon(t *testing.T) {
 	fixture := UnmarshalTestFixture(FirefoxAddonFixture)
 	p7, err := Parse(fixture.Input)
@@ -278,7 +286,13 @@ func TestVerifyFirefoxAddon(t *testing.T) {
 		t.Errorf("No end-entity certificate found for signer")
 	}
 	signingTime := mustParseTime("2017-02-23T09:06:16-05:00")
-	chains, err := verifyCertChain(ee, p7.Certificates, certPool, signingTime)
+
+	intermediates := buildCertPool(p7.Certificates)
+	pools := certPools {
+		Roots: certPool,
+		Intermediates: intermediates,
+	}
+	chains, err := verifyCertChain(ee, pools, signingTime)
 	if err != nil {
 		t.Error(err)
 	}
@@ -568,7 +582,13 @@ but that's not what ships are built for.
 				if ee == nil {
 					t.Fatalf("No end-entity certificate found for signer")
 				}
-				chains, err := verifyCertChain(ee, p7.Certificates, truststore, time.Now())
+
+				intermediates := buildCertPool(p7.Certificates)
+				pools := certPools {
+					Roots: truststore,
+					Intermediates: intermediates,
+				}
+				chains, err := verifyCertChain(ee, pools, time.Now())
 				if err != nil {
 					t.Fatal(err)
 				}

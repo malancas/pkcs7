@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+type certPools struct {
+	Roots *x509.CertPool
+	Intermediates *x509.CertPool
+}
+
 // Verify is a wrapper around VerifyWithChain() that initializes an empty
 // trust store, effectively disabling certificate verification when validating
 // a signature.
@@ -25,21 +30,8 @@ func (p7 *PKCS7) Verify() (err error) {
 // authenticated attr verifies the chain at that time and UTC now
 // otherwise.
 func (p7 *PKCS7) VerifyWithChain(truststore *x509.CertPool) (err error) {
-	if len(p7.Signers) == 0 {
-		return errors.New("pkcs7: Message has no signers")
-	}
-	for _, signer := range p7.Signers {
-		ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
-		if ee == nil {
-			return errors.New("pkcs7: No certificate for signer")
-		}
-		
-		signingTime := time.Now().UTC()
-		if err := verifySignature(ee, p7, signer, truststore, signingTime); err != nil {
-			return err
-		}
-	}
-	return nil
+	signingTime := time.Now().UTC()
+	return p7.VerifyWithChainAtTime(truststore, signingTime)
 }
 
 // VerifyWithChainAtTime checks the signatures of a PKCS7 object.
@@ -65,9 +57,20 @@ func (p7 *PKCS7) VerifyWithChainAtTime(truststore *x509.CertPool, currentTime ti
 	return nil
 }
 
-func (p7 *PKCS7) VerifyWithCertPools(rootPool, intermediatePool *x509.CertPool, leafCert *x509.Certificate, eku x509.ExtKeyUsage) (err error) {
+func (p7 *PKCS7) VerifyWithCertPools(pools certPools, leafCert *x509.Certificate, eku x509.ExtKeyUsage) (err error) {
 	if len(p7.Signers) == 0 {
 		return errors.New("pkcs7: Message has no signers")
+	}
+	if leafCert != nil {
+		for _, signer := range p7.Signers {
+			if !isCertMatchForIssuerAndSerial(leafCert, signer.IssuerAndSerialNumber) {
+				return errors.New("pkcs7: leaf certificate does not match signer")
+			}
+			signingTime := time.Now().UTC()
+			if err := verifySignatureWithCertPools(leafCert, p7, signer, pools, signingTime); err != nil {
+				return err
+			}
+		}
 	}
 	for _, signer := range p7.Signers {
 		ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
@@ -76,7 +79,7 @@ func (p7 *PKCS7) VerifyWithCertPools(rootPool, intermediatePool *x509.CertPool, 
 		}
 		
 		signingTime := time.Now().UTC()
-		if err := verifySignature(ee, p7, signer, rootPool, signingTime); err != nil {
+		if err := verifySignatureWithCertPools(ee, p7, signer, pools, signingTime); err != nil {
 			return err
 		}
 	}
@@ -93,7 +96,12 @@ func verifySignature(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, trustst
 		for _, intermediate := range p7.Certificates {
 			intermediates.AddCert(intermediate)
 		}
-		_, err = verifyCertChain(ee, intermediates, truststore, signingTime)
+		pools := certPools {
+			Roots: truststore,
+			Intermediates: intermediates,
+		}
+
+		_, err = verifyCertChain(ee, pools, signingTime)
 		if err != nil {
 			return err
 		}
@@ -105,13 +113,13 @@ func verifySignature(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, trustst
 	return ee.CheckSignature(sigalg, signedData, signer.EncryptedDigest)
 }
 
-func verifySignatureWithCertPools(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, intermediatePool *x509.CertPool, truststore *x509.CertPool, signingTime time.Time) (err error) {
+func verifySignatureWithCertPools(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, pools certPools, signingTime time.Time) (err error) {
 	signedData, err := verifySignedData(ee, p7.Content, signer, signingTime)
 	if err != nil {
 		return err
 	}
-	if truststore != nil && intermediatePool != nil {
-		_, err = verifyCertChain(ee, intermediatePool, truststore, signingTime)
+	if pools.Roots != nil && pools.Intermediates != nil {
+		_, err = verifyCertChain(ee, pools, signingTime)
 		if err != nil {
 			return err
 		}
@@ -231,10 +239,10 @@ func parseSignedData(data []byte) (*PKCS7, error) {
 //
 // When verifying chains that may have expired, currentTime can be set to a past date
 // to allow the verification to pass. If unset, currentTime is set to the current UTC time.
-func verifyCertChain(ee *x509.Certificate, intermediates, truststore *x509.CertPool, currentTime time.Time) (chains [][]*x509.Certificate, err error) {
+func verifyCertChain(ee *x509.Certificate, pools certPools, currentTime time.Time) (chains [][]*x509.Certificate, err error) {
 	verifyOptions := x509.VerifyOptions{
-		Roots:         truststore,
-		Intermediates: intermediates,
+		Roots:         pools.Roots,
+		Intermediates: pools.Intermediates,
 		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
 		CurrentTime:   currentTime,
 	}
