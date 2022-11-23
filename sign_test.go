@@ -14,36 +14,38 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+
+	pkcs7testing "github.com/digitorus/pkcs7/testing"
 )
 
 func TestSign(t *testing.T) {
 	content := []byte("Hello World")
 	sigalgs := []x509.SignatureAlgorithm{
-		x509.SHA1WithRSA,
+		// x509.SHA1WithRSA,
 		x509.SHA256WithRSA,
 		x509.SHA512WithRSA,
-		x509.ECDSAWithSHA1,
+		// x509.ECDSAWithSHA1,
 		x509.ECDSAWithSHA256,
 		x509.ECDSAWithSHA384,
 		x509.ECDSAWithSHA512,
 		x509.PureEd25519,
 	}
 	for _, sigalgroot := range sigalgs {
-		rootCert, err := createTestCertificateByIssuer("PKCS7 Test Root CA", nil, sigalgroot, true)
+		rootCert, err := pkcs7testing.CreateTestCertificateByIssuer("PKCS7 Test Root CA", nil, sigalgroot, true)
 		if err != nil {
 			t.Fatalf("test %s: cannot generate root cert: %s", sigalgroot, err)
 		}
 		truststore := x509.NewCertPool()
 		truststore.AddCert(rootCert.Certificate)
 		for _, sigalginter := range sigalgs {
-			interCert, err := createTestCertificateByIssuer("PKCS7 Test Intermediate Cert", rootCert, sigalginter, true)
+			interCert, err := pkcs7testing.CreateTestCertificateByIssuer("PKCS7 Test Intermediate Cert", rootCert, sigalginter, true)
 			if err != nil {
 				t.Fatalf("test %s/%s: cannot generate intermediate cert: %s", sigalgroot, sigalginter, err)
 			}
 			var parents []*x509.Certificate
 			parents = append(parents, interCert.Certificate)
 			for _, sigalgsigner := range sigalgs {
-				signerCert, err := createTestCertificateByIssuer("PKCS7 Test Signer Cert", interCert, sigalgsigner, false)
+				signerCert, err := pkcs7testing.CreateTestCertificateByIssuer("PKCS7 Test Signer Cert", interCert, sigalgsigner, false)
 				if err != nil {
 					t.Fatalf("test %s/%s/%s: cannot generate signer cert: %s", sigalgroot, sigalginter, sigalgsigner, err)
 				}
@@ -161,24 +163,24 @@ func TestDSASignAndVerifyWithOpenSSL(t *testing.T) {
 func TestSignWithoutAttributes(t *testing.T) {
 	content := []byte("Hello World")
 	sigalgs := []x509.SignatureAlgorithm{
-		x509.SHA1WithRSA,
+		// x509.SHA1WithRSA,
 		x509.SHA256WithRSA,
 		x509.SHA512WithRSA,
-		x509.ECDSAWithSHA1,
+		// x509.ECDSAWithSHA1,
 		x509.ECDSAWithSHA256,
 		x509.ECDSAWithSHA384,
 		x509.ECDSAWithSHA512,
 		x509.PureEd25519,
 	}
 	for _, sigalgroot := range sigalgs {
-		rootCert, err := createTestCertificateByIssuer("PKCS7 Test Root CA", nil, sigalgroot, true)
+		rootCert, err := pkcs7testing.CreateTestCertificateByIssuer("PKCS7 Test Root CA", nil, sigalgroot, true)
 		if err != nil {
 			t.Fatalf("test %s: cannot generate root cert: %s", sigalgroot, err)
 		}
 		truststore := x509.NewCertPool()
 		truststore.AddCert(rootCert.Certificate)
 		for _, sigalgsigner := range sigalgs {
-			signerCert, err := createTestCertificateByIssuer("PKCS7 Test Signer Cert", rootCert, sigalgsigner, false)
+			signerCert, err := pkcs7testing.CreateTestCertificateByIssuer("PKCS7 Test Signer Cert", rootCert, sigalgsigner, false)
 			if err != nil {
 				t.Fatalf("test %s/%s: cannot generate signer cert: %s", sigalgroot, sigalgsigner, err)
 			}

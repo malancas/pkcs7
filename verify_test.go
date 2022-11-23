@@ -12,11 +12,14 @@ import (
 	"os/exec"
 	"testing"
 	"time"
+
+	pkcs7 "github.com/digitorus/pkcs7"
+	pkcs7testing "github.com/digitorus/pkcs7/testing"
 )
 
 func TestVerify(t *testing.T) {
-	fixture := UnmarshalTestFixture(SignedTestFixture)
-	p7, err := Parse(fixture.Input)
+	fixture := pkcs7testing.UnmarshalTestFixture(SignedTestFixture)
+	p7, err := pkcs7.Parse(fixture.Input)
 	if err != nil {
 		t.Errorf("Parse encountered unexpected error: %v", err)
 	}
@@ -81,8 +84,8 @@ BCvcu85DqJeJyQv44Oe1qsXEX9BfcQIOVaoep35RPlKi9g==
 -----END PRIVATE KEY-----`
 
 func TestVerifyAppStore(t *testing.T) {
-	fixture := UnmarshalTestFixture(AppStoreReceiptFixture)
-	p7, err := Parse(fixture.Input)
+	fixture := pkcs7testing.UnmarshalTestFixture(AppStoreReceiptFixture)
+	p7, err := pkcs7.Parse(fixture.Input)
 	if err != nil {
 		t.Errorf("Parse encountered unexpected error: %v", err)
 	}
@@ -202,8 +205,8 @@ QfjfFBG9JG2mUmYQP1KQ3SypGHzDW8vngvsGu//tNU0NFfOqQu4bYU4VpQl0nPtD
 -----END PKCS7-----`
 
 func TestVerifyApkEcdsa(t *testing.T) {
-	fixture := UnmarshalTestFixture(ApkEcdsaFixture)
-	p7, err := Parse(fixture.Input)
+	fixture := pkcs7testing.UnmarshalTestFixture(ApkEcdsaFixture)
+	p7, err := pkcs7.Parse(fixture.Input)
 	if err != nil {
 		t.Errorf("Parse encountered unexpected error: %v", err)
 	}
@@ -247,8 +250,8 @@ func buildCertPool(certs []*x509.Certificate) *x509.CertPool {
 }
 
 func TestVerifyFirefoxAddon(t *testing.T) {
-	fixture := UnmarshalTestFixture(FirefoxAddonFixture)
-	p7, err := Parse(fixture.Input)
+	fixture := pkcs7testing.UnmarshalTestFixture(FirefoxAddonFixture)
+	p7, err := pkcs7.Parse(fixture.Input)
 	if err != nil {
 		t.Errorf("Parse encountered unexpected error: %v", err)
 	}
@@ -281,18 +284,18 @@ func TestVerifyFirefoxAddon(t *testing.T) {
 
 	// Verify the certificate chain to make sure the identified root
 	// is the one we expect
-	ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, p7.Signers[0].IssuerAndSerialNumber)
+	ee := pkcs7.GetCertFromCertsByIssuerAndSerial(p7.Certificates, p7.Signers[0].IssuerAndSerialNumber)
 	if ee == nil {
 		t.Errorf("No end-entity certificate found for signer")
 	}
 	signingTime := mustParseTime("2017-02-23T09:06:16-05:00")
 
 	intermediates := buildCertPool(p7.Certificates)
-	pools := certPools {
+	pools := pkcs7.CertPools {
 		Roots: certPool,
 		Intermediates: intermediates,
 	}
-	chains, err := verifyCertChain(ee, pools, signingTime)
+	chains, err := pkcs7.VerifyCertChain(ee, pools, signingTime)
 	if err != nil {
 		t.Error(err)
 	}
@@ -472,23 +475,23 @@ but that's not what ships are built for.
 	}
 	ioutil.WriteFile(tmpContentFile.Name(), content, 0755)
 	sigalgs := []x509.SignatureAlgorithm{
-		x509.SHA1WithRSA,
+		// x509.SHA1WithRSA,
 		x509.SHA256WithRSA,
 		x509.SHA512WithRSA,
-		x509.ECDSAWithSHA1,
+		// x509.ECDSAWithSHA1,
 		x509.ECDSAWithSHA256,
 		x509.ECDSAWithSHA384,
 		x509.ECDSAWithSHA512,
 	}
 	for _, sigalgroot := range sigalgs {
-		rootCert, err := createTestCertificateByIssuer("PKCS7 Test Root CA", nil, sigalgroot, true)
+		rootCert, err := pkcs7testing.CreateTestCertificateByIssuer("PKCS7 Test Root CA", nil, sigalgroot, true)
 		if err != nil {
 			t.Fatalf("test %s: cannot generate root cert: %s", sigalgroot, err)
 		}
 		truststore := x509.NewCertPool()
 		truststore.AddCert(rootCert.Certificate)
 		for _, sigalginter := range sigalgs {
-			interCert, err := createTestCertificateByIssuer("PKCS7 Test Intermediate Cert", rootCert, sigalginter, true)
+			interCert, err := pkcs7testing.CreateTestCertificateByIssuer("PKCS7 Test Intermediate Cert", rootCert, sigalginter, true)
 			if err != nil {
 				t.Fatalf("test %s/%s: cannot generate intermediate cert: %s", sigalgroot, sigalginter, err)
 			}
@@ -504,7 +507,7 @@ but that's not what ships are built for.
 			pem.Encode(fd, &pem.Block{Type: "CERTIFICATE", Bytes: interCert.Certificate.Raw})
 			fd.Close()
 			for _, sigalgsigner := range sigalgs {
-				signerCert, err := createTestCertificateByIssuer("PKCS7 Test Signer Cert", interCert, sigalgsigner, false)
+				signerCert, err := pkcs7testing.CreateTestCertificateByIssuer("PKCS7 Test Signer Cert", interCert, sigalgsigner, false)
 				if err != nil {
 					t.Fatalf("test %s/%s/%s: cannot generate signer cert: %s", sigalgroot, sigalginter, sigalgsigner, err)
 				}
@@ -530,14 +533,14 @@ but that's not what ships are built for.
 				if err != nil {
 					t.Fatal(err)
 				}
-				var derKey []byte
+
 				priv := *signerCert.PrivateKey
 				switch priv := priv.(type) {
 				case *rsa.PrivateKey:
-					derKey = x509.MarshalPKCS1PrivateKey(priv)
+					derKey := x509.MarshalPKCS1PrivateKey(priv)
 					pem.Encode(fd, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: derKey})
 				case *ecdsa.PrivateKey:
-					derKey, err = x509.MarshalECPrivateKey(priv)
+					derKey, err := x509.MarshalECPrivateKey(priv)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -569,7 +572,7 @@ but that's not what ships are built for.
 				if derBlock == nil {
 					break
 				}
-				p7, err := Parse(derBlock.Bytes)
+				p7, err := pkcs7.Parse(derBlock.Bytes)
 				if err != nil {
 					t.Fatalf("Parse encountered unexpected error: %v", err)
 				}
@@ -578,17 +581,17 @@ but that's not what ships are built for.
 				}
 				// Verify the certificate chain to make sure the identified root
 				// is the one we expect
-				ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, p7.Signers[0].IssuerAndSerialNumber)
+				ee := pkcs7.GetCertFromCertsByIssuerAndSerial(p7.Certificates, p7.Signers[0].IssuerAndSerialNumber)
 				if ee == nil {
 					t.Fatalf("No end-entity certificate found for signer")
 				}
 
 				intermediates := buildCertPool(p7.Certificates)
-				pools := certPools {
+				pools := pkcs7.CertPools {
 					Roots: truststore,
 					Intermediates: intermediates,
 				}
-				chains, err := verifyCertChain(ee, pools, time.Now())
+				chains, err := pkcs7.VerifyCertChain(ee, pools, time.Now())
 				if err != nil {
 					t.Fatal(err)
 				}
