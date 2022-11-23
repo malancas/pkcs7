@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-type certPools struct {
+type CertPools struct {
 	Roots *x509.CertPool
 	Intermediates *x509.CertPool
 }
@@ -45,7 +45,7 @@ func (p7 *PKCS7) VerifyWithChainAtTime(truststore *x509.CertPool, currentTime ti
 		return errors.New("pkcs7: Message has no signers")
 	}
 	for _, signer := range p7.Signers {
-		ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
+		ee := GetCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 		if ee == nil {
 			return errors.New("pkcs7: No certificate for signer")
 		}
@@ -57,7 +57,7 @@ func (p7 *PKCS7) VerifyWithChainAtTime(truststore *x509.CertPool, currentTime ti
 	return nil
 }
 
-func (p7 *PKCS7) VerifyWithCertPools(pools certPools, leafCert *x509.Certificate, eku x509.ExtKeyUsage) (err error) {
+func (p7 *PKCS7) VerifyWithCertPools(pools CertPools, leafCert *x509.Certificate, eku x509.ExtKeyUsage) (err error) {
 	if len(p7.Signers) == 0 {
 		return errors.New("pkcs7: Message has no signers")
 	}
@@ -73,7 +73,7 @@ func (p7 *PKCS7) VerifyWithCertPools(pools certPools, leafCert *x509.Certificate
 		}
 	}
 	for _, signer := range p7.Signers {
-		ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
+		ee := GetCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 		if ee == nil {
 			return errors.New("pkcs7: No certificate for signer")
 		}
@@ -96,12 +96,12 @@ func verifySignature(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, trustst
 		for _, intermediate := range p7.Certificates {
 			intermediates.AddCert(intermediate)
 		}
-		pools := certPools {
+		pools := CertPools {
 			Roots: truststore,
 			Intermediates: intermediates,
 		}
 
-		_, err = verifyCertChain(ee, pools, signingTime)
+		_, err = VerifyCertChain(ee, pools, signingTime)
 		if err != nil {
 			return err
 		}
@@ -113,13 +113,13 @@ func verifySignature(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, trustst
 	return ee.CheckSignature(sigalg, signedData, signer.EncryptedDigest)
 }
 
-func verifySignatureWithCertPools(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, pools certPools, signingTime time.Time) (err error) {
+func verifySignatureWithCertPools(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, pools CertPools, signingTime time.Time) (err error) {
 	signedData, err := verifySignedData(ee, p7.Content, signer, signingTime)
 	if err != nil {
 		return err
 	}
 	if pools.Roots != nil && pools.Intermediates != nil {
-		_, err = verifyCertChain(ee, pools, signingTime)
+		_, err = VerifyCertChain(ee, pools, signingTime)
 		if err != nil {
 			return err
 		}
@@ -179,7 +179,7 @@ func (p7 *PKCS7) GetOnlySigner() *x509.Certificate {
 		return nil
 	}
 	signer := p7.Signers[0]
-	return getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
+	return GetCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 }
 
 // UnmarshalSignedAttribute decodes a single attribute from the signer info
@@ -239,7 +239,7 @@ func parseSignedData(data []byte) (*PKCS7, error) {
 //
 // When verifying chains that may have expired, currentTime can be set to a past date
 // to allow the verification to pass. If unset, currentTime is set to the current UTC time.
-func verifyCertChain(ee *x509.Certificate, pools certPools, currentTime time.Time) (chains [][]*x509.Certificate, err error) {
+func VerifyCertChain(ee *x509.Certificate, pools CertPools, currentTime time.Time) (chains [][]*x509.Certificate, err error) {
 	verifyOptions := x509.VerifyOptions{
 		Roots:         pools.Roots,
 		Intermediates: pools.Intermediates,
@@ -327,7 +327,7 @@ func getSignatureAlgorithm(digestEncryption, digest pkix.AlgorithmIdentifier) (x
 	}
 }
 
-func getCertFromCertsByIssuerAndSerial(certs []*x509.Certificate, ias issuerAndSerial) *x509.Certificate {
+func GetCertFromCertsByIssuerAndSerial(certs []*x509.Certificate, ias issuerAndSerial) *x509.Certificate {
 	for _, cert := range certs {
 		if isCertMatchForIssuerAndSerial(cert, ias) {
 			return cert
