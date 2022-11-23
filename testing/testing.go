@@ -55,7 +55,6 @@ func UnmarshalTestFixture(testPEMBlock string) TestFixture {
 
 func CreateTestCertificateByIssuer(name string, issuer *CertKeyPair, sigAlg x509.SignatureAlgorithm, isCA bool) (*CertKeyPair, error) {
 	var (
-		err        error
 		priv       crypto.PrivateKey
 		derCert    []byte
 		issuerCert *x509.Certificate
@@ -244,9 +243,9 @@ func CreateTestCertificateByIssuer(name string, issuer *CertKeyPair, sigAlg x509
 	switch priv.(type) {
 	case *rsa.PrivateKey:
 		switch issuerKey := issuerKey.(type) {
-		case *rsa.PrivateKey:
+		case rsa.PrivateKey:
 			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*rsa.PrivateKey).Public(), issuerKey)
-		case *ecdsa.PrivateKey:
+		case ecdsa.PrivateKey:
 			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*rsa.PrivateKey).Public(), issuerKey)
 		case ed25519.PrivateKey:
 			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*rsa.PrivateKey).Public(), issuerKey)
