@@ -10,7 +10,33 @@ import (
 	"time"
 )
 
-type CertPools struct {
+// ErrMessageDigestMismatch is returned when the signer data digest does not
+// match the computed digest for the contained content
+type ErrMessageDigestMismatch struct {
+	ExpectedDigest []byte
+	ActualDigest   []byte
+}
+
+func (err *ErrMessageDigestMismatch) Error() string {
+	return fmt.Sprintf("pkcs7: Message digest mismatch\n\tExpected: %X\n\tActual  : %X", err.ExpectedDigest, err.ActualDigest)
+}
+
+// ErrSigningTimeNotValid is returned when the signing time does not fall
+// within the validity time of the certificate
+type ErrSigningTimeNotValid struct {
+	signingTime time.Time
+	notBefore time.Time
+	notAfter  time.Time
+}
+
+func (err *ErrSigningTimeNotValid) Error() string {
+	return fmt.Sprintf("pkcs7: signing time %q is outside of certificate validity %q to %q", 
+		err.signingTime.Format(time.RFC3339),
+		err.notBefore.Format(time.RFC3339),
+		err.notAfter.Format(time.RFC3339))
+}
+
+type certPools struct {
 	Roots *x509.CertPool
 	Intermediates *x509.CertPool
 }
@@ -57,7 +83,7 @@ func (p7 *PKCS7) VerifyWithChainAtTime(truststore *x509.CertPool, currentTime ti
 	return nil
 }
 
-func (p7 *PKCS7) VerifyWithCertPools(pools CertPools, leafCert *x509.Certificate, eku x509.ExtKeyUsage) (err error) {
+func (p7 *PKCS7) VerifyWithCertPools(pools certPools, leafCert *x509.Certificate, eku x509.ExtKeyUsage) (err error) {
 	if len(p7.Signers) == 0 {
 		return errors.New("pkcs7: Message has no signers")
 	}
@@ -96,7 +122,7 @@ func verifySignature(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, trustst
 		for _, intermediate := range p7.Certificates {
 			intermediates.AddCert(intermediate)
 		}
-		pools := CertPools {
+		pools := certPools {
 			Roots: truststore,
 			Intermediates: intermediates,
 		}
@@ -113,7 +139,7 @@ func verifySignature(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, trustst
 	return ee.CheckSignature(sigalg, signedData, signer.EncryptedDigest)
 }
 
-func verifySignatureWithCertPools(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, pools CertPools, signingTime time.Time) (err error) {
+func verifySignatureWithCertPools(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, pools certPools, signingTime time.Time) (err error) {
 	signedData, err := verifySignedData(ee, p7.Content, signer, signingTime)
 	if err != nil {
 		return err
@@ -150,7 +176,7 @@ func verifySignedData(ee *x509.Certificate, p7Content []byte, signer signerInfo,
 	h.Write(p7Content)
 	computed := h.Sum(nil)
 	if subtle.ConstantTimeCompare(digest, computed) != 1 {
-		return nil, &MessageDigestMismatchError{
+		return nil, &ErrMessageDigestMismatch{
 			ExpectedDigest: digest,
 			ActualDigest:   computed,
 		}
@@ -160,13 +186,16 @@ func verifySignedData(ee *x509.Certificate, p7Content []byte, signer signerInfo,
 		return nil, err
 	}
 	err = unmarshalAttribute(signer.AuthenticatedAttributes, OIDAttributeSigningTime, &signingTime)
-	if err == nil {
-		// signing time found, performing validity check
-		if signingTime.After(ee.NotAfter) || signingTime.Before(ee.NotBefore) {
-			return nil, fmt.Errorf("pkcs7: signing time %q is outside of certificate validity %q to %q",
-				signingTime.Format(time.RFC3339),
-				ee.NotBefore.Format(time.RFC3339),
-				ee.NotAfter.Format(time.RFC3339))
+	if err != nil {
+		return nil, err
+	}
+
+	// signing time found, performing validity check
+	if signingTime.After(ee.NotAfter) || signingTime.Before(ee.NotBefore) {
+		return nil, &ErrSigningTimeNotValid{
+			signingTime: signingTime,
+			notBefore: ee.NotBefore,
+			notAfter: ee.NotAfter,
 		}
 	}
 	return signedData, nil
@@ -202,7 +231,6 @@ func parseSignedData(data []byte) (*PKCS7, error) {
 	if err != nil {
 		return nil, err
 	}
-	// fmt.Printf("--> Signed Data Version %d\n", sd.Version)
 
 	var compound asn1.RawValue
 	var content unsignedData
@@ -239,7 +267,7 @@ func parseSignedData(data []byte) (*PKCS7, error) {
 //
 // When verifying chains that may have expired, currentTime can be set to a past date
 // to allow the verification to pass. If unset, currentTime is set to the current UTC time.
-func VerifyCertChain(ee *x509.Certificate, pools CertPools, currentTime time.Time) (chains [][]*x509.Certificate, err error) {
+func VerifyCertChain(ee *x509.Certificate, pools certPools, currentTime time.Time) (chains [][]*x509.Certificate, err error) {
 	verifyOptions := x509.VerifyOptions{
 		Roots:         pools.Roots,
 		Intermediates: pools.Intermediates,
@@ -251,17 +279,6 @@ func VerifyCertChain(ee *x509.Certificate, pools CertPools, currentTime time.Tim
 		return chains, fmt.Errorf("pkcs7: failed to verify certificate chain: %v", err)
 	}
 	return
-}
-
-// MessageDigestMismatchError is returned when the signer data digest does not
-// match the computed digest for the contained content
-type MessageDigestMismatchError struct {
-	ExpectedDigest []byte
-	ActualDigest   []byte
-}
-
-func (err *MessageDigestMismatchError) Error() string {
-	return fmt.Sprintf("pkcs7: Message digest mismatch\n\tExpected: %X\n\tActual  : %X", err.ExpectedDigest, err.ActualDigest)
 }
 
 func getSignatureAlgorithm(digestEncryption, digest pkix.AlgorithmIdentifier) (x509.SignatureAlgorithm, error) {
