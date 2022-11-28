@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+var ErrAttributeTypeNotFound = errors.New("pkcs7: attribute type not in attributes")
+
 // ErrMessageDigestMismatch is returned when the signer data digest does not
 // match the computed digest for the contained content
 type ErrMessageDigestMismatch struct {
@@ -113,20 +115,20 @@ func (p7 *PKCS7) VerifyWithCertPools(pools certPools, leafCert *x509.Certificate
 }
 
 func verifySignature(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, truststore *x509.CertPool, signingTime time.Time) (err error) {
-	signedData, err := verifySignedData(ee, p7.Content, signer, signingTime)
+	signedData, err := verifySignedData(ee, p7.Content, signer)
 	if err != nil {
 		return err
 	}
-	if truststore != nil {
-		intermediates := x509.NewCertPool()
-		for _, intermediate := range p7.Certificates {
-			intermediates.AddCert(intermediate)
-		}
-		pools := certPools {
-			Roots: truststore,
-			Intermediates: intermediates,
-		}
 
+	intermediates := x509.NewCertPool()
+	for _, intermediate := range p7.Certificates {
+		intermediates.AddCert(intermediate)
+	}
+	pools := certPools {
+		Intermediates: intermediates,
+		Roots: truststore,
+	}
+	if truststore != nil {
 		_, err = VerifyCertChain(ee, pools, signingTime)
 		if err != nil {
 			return err
@@ -140,7 +142,7 @@ func verifySignature(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, trustst
 }
 
 func verifySignatureWithCertPools(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, pools certPools, signingTime time.Time) (err error) {
-	signedData, err := verifySignedData(ee, p7.Content, signer, signingTime)
+	signedData, err := verifySignedData(ee, p7.Content, signer)
 	if err != nil {
 		return err
 	}
@@ -157,7 +159,7 @@ func verifySignatureWithCertPools(ee *x509.Certificate, p7 *PKCS7, signer signer
 	return ee.CheckSignature(sigalg, signedData, signer.EncryptedDigest)
 }
 
-func verifySignedData(ee *x509.Certificate, p7Content []byte, signer signerInfo, signingTime time.Time) ([]byte, error) {
+func verifySignedData(ee *x509.Certificate, p7Content []byte, signer signerInfo) ([]byte, error) {
 	if len(signer.AuthenticatedAttributes) == 0 {
 		return p7Content, nil
 	}
@@ -185,6 +187,8 @@ func verifySignedData(ee *x509.Certificate, p7Content []byte, signer signerInfo,
 	if err != nil {
 		return nil, err
 	}
+
+	signingTime := time.Now().UTC()
 	err = unmarshalAttribute(signer.AuthenticatedAttributes, OIDAttributeSigningTime, &signingTime)
 	if err != nil {
 		return nil, err
@@ -360,5 +364,5 @@ func unmarshalAttribute(attrs []attribute, attributeType asn1.ObjectIdentifier, 
 			return err
 		}
 	}
-	return errors.New("pkcs7: attribute type not in attributes")
+	return ErrAttributeTypeNotFound
 }
