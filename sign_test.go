@@ -9,13 +9,10 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"math/big"
 	"os"
 	"os/exec"
 	"testing"
-
-	pkcs7testing "github.com/digitorus/pkcs7/testing"
 )
 
 func TestSign(t *testing.T) {
@@ -31,26 +28,26 @@ func TestSign(t *testing.T) {
 		x509.PureEd25519,
 	}
 	for _, sigalgroot := range sigalgs {
-		rootCert, err := pkcs7testing.CreateTestCertificateByIssuer("PKCS7 Test Root CA", nil, sigalgroot, true)
+		rootCert, err := createTestCertificateByIssuer("PKCS7 Test Root CA", nil, sigalgroot, true)
 		if err != nil {
 			t.Fatalf("test %s: cannot generate root cert: %s", sigalgroot, err)
 		}
 		truststore := x509.NewCertPool()
 		truststore.AddCert(rootCert.Certificate)
 		for _, sigalginter := range sigalgs {
-			interCert, err := pkcs7testing.CreateTestCertificateByIssuer("PKCS7 Test Intermediate Cert", rootCert, sigalginter, true)
+			interCert, err := createTestCertificateByIssuer("PKCS7 Test Intermediate Cert", rootCert, sigalginter, true)
 			if err != nil {
 				t.Fatalf("test %s/%s: cannot generate intermediate cert: %s", sigalgroot, sigalginter, err)
 			}
 			var parents []*x509.Certificate
 			parents = append(parents, interCert.Certificate)
 			for _, sigalgsigner := range sigalgs {
-				signerCert, err := pkcs7testing.CreateTestCertificateByIssuer("PKCS7 Test Signer Cert", interCert, sigalgsigner, false)
+				signerCert, err := createTestCertificateByIssuer("PKCS7 Test Signer Cert", interCert, sigalgsigner, false)
 				if err != nil {
 					t.Fatalf("test %s/%s/%s: cannot generate signer cert: %s", sigalgroot, sigalginter, sigalgsigner, err)
 				}
 				for _, testDetach := range []bool{false, true} {
-					log.Printf("test %s/%s/%s detached %t\n", sigalgroot, sigalginter, sigalgsigner, testDetach)
+					// log.Printf("test %s/%s/%s detached %t\n", sigalgroot, sigalginter, sigalgsigner, testDetach)
 					toBeSigned, err := NewSignedData(content)
 					if err != nil {
 						t.Fatalf("test %s/%s/%s: cannot initialize signed data: %s", sigalgroot, sigalginter, sigalgsigner, err)
@@ -70,7 +67,7 @@ func TestSign(t *testing.T) {
 					if err != nil {
 						t.Fatalf("test %s/%s/%s: cannot finish signing data: %s", sigalgroot, sigalginter, sigalgsigner, err)
 					}
-					pem.Encode(os.Stdout, &pem.Block{Type: "PKCS7", Bytes: signed})
+
 					p7, err := Parse(signed)
 					if err != nil {
 						t.Fatalf("test %s/%s/%s: cannot parse signed data: %s", sigalgroot, sigalginter, sigalgsigner, err)
@@ -173,19 +170,19 @@ func TestSignWithoutAttributes(t *testing.T) {
 		x509.PureEd25519,
 	}
 	for _, sigalgroot := range sigalgs {
-		rootCert, err := pkcs7testing.CreateTestCertificateByIssuer("PKCS7 Test Root CA", nil, sigalgroot, true)
+		rootCert, err := createTestCertificateByIssuer("PKCS7 Test Root CA", nil, sigalgroot, true)
 		if err != nil {
 			t.Fatalf("test %s: cannot generate root cert: %s", sigalgroot, err)
 		}
 		truststore := x509.NewCertPool()
 		truststore.AddCert(rootCert.Certificate)
 		for _, sigalgsigner := range sigalgs {
-			signerCert, err := pkcs7testing.CreateTestCertificateByIssuer("PKCS7 Test Signer Cert", rootCert, sigalgsigner, false)
+			signerCert, err := createTestCertificateByIssuer("PKCS7 Test Signer Cert", rootCert, sigalgsigner, false)
 			if err != nil {
 				t.Fatalf("test %s/%s: cannot generate signer cert: %s", sigalgroot, sigalgsigner, err)
 			}
 			for _, testDetach := range []bool{false, true} {
-				log.Printf("test %s/%s/%s detached %t\n", sigalgroot, sigalgroot, sigalgsigner, testDetach)
+				// log.Printf("test %s/%s/%s detached %t\n", sigalgroot, sigalgroot, sigalgsigner, testDetach)
 				toBeSigned, err := NewSignedData(content)
 				if err != nil {
 					t.Fatalf("test %s/%s: cannot initialize signed data: %s", sigalgroot, sigalgsigner, err)
@@ -205,7 +202,7 @@ func TestSignWithoutAttributes(t *testing.T) {
 				if err != nil {
 					t.Fatalf("test %s/%s: cannot finish signing data: %s", sigalgroot, sigalgsigner, err)
 				}
-				pem.Encode(os.Stdout, &pem.Block{Type: "PKCS7", Bytes: signed})
+
 				p7, err := Parse(signed)
 				if err != nil {
 					t.Fatalf("test %s/%s: cannot parse signed data: %s", sigalgroot, sigalgsigner, err)
@@ -251,11 +248,11 @@ func ExampleSignedData() {
 	signedData.Detach()
 
 	// Finish() to obtain the signature bytes
-	detachedSignature, err := signedData.Finish()
-	if err != nil {
-		fmt.Printf("Cannot finish signing data: %s", err)
-	}
-	pem.Encode(os.Stdout, &pem.Block{Type: "PKCS7", Bytes: detachedSignature})
+	// detachedSignature, err := signedData.Finish()
+	// if err != nil {
+	// 	fmt.Printf("Cannot finish signing data: %s", err)
+	// }
+	// pem.Encode(os.Stdout, &pem.Block{Type: "PKCS7", Bytes: detachedSignature})
 }
 
 func TestSetContentType(t *testing.T) {
@@ -332,7 +329,7 @@ func TestDegenerateCertificate(t *testing.T) {
 		t.Fatal(err)
 	}
 	testOpenSSLParse(t, deg)
-	pem.Encode(os.Stdout, &pem.Block{Type: "PKCS7", Bytes: deg})
+	// pem.Encode(os.Stdout, &pem.Block{Type: "PKCS7", Bytes: deg})
 }
 
 func TestSkipCertificates(t *testing.T) {
