@@ -13,12 +13,10 @@ import (
 	"os/exec"
 	"testing"
 	"time"
-
-	pkcs7testing "github.com/digitorus/pkcs7/testing"
 )
 
 func TestVerify(t *testing.T) {
-	fixture := pkcs7testing.UnmarshalTestFixture(SignedTestFixture)
+	fixture := UnmarshalTestFixture(SignedTestFixture)
 	p7, err := Parse(fixture.Input)
 	if err != nil {
 		t.Errorf("Parse encountered unexpected error: %v", err)
@@ -84,7 +82,7 @@ BCvcu85DqJeJyQv44Oe1qsXEX9BfcQIOVaoep35RPlKi9g==
 -----END PRIVATE KEY-----`
 
 func TestVerifyAppStore(t *testing.T) {
-	fixture := pkcs7testing.UnmarshalTestFixture(AppStoreReceiptFixture)
+	fixture := UnmarshalTestFixture(AppStoreReceiptFixture)
 	p7, err := Parse(fixture.Input)
 	if err != nil {
 		t.Errorf("Parse encountered unexpected error: %v", err)
@@ -205,7 +203,7 @@ QfjfFBG9JG2mUmYQP1KQ3SypGHzDW8vngvsGu//tNU0NFfOqQu4bYU4VpQl0nPtD
 -----END PKCS7-----`
 
 func TestVerifyApkEcdsa(t *testing.T) {
-	fixture := pkcs7testing.UnmarshalTestFixture(ApkEcdsaFixture)
+	fixture := UnmarshalTestFixture(ApkEcdsaFixture)
 	p7, err := Parse(fixture.Input)
 	if err != nil {
 		t.Errorf("Parse encountered unexpected error: %v", err)
@@ -250,7 +248,7 @@ func buildCertPool(certs []*x509.Certificate) *x509.CertPool {
 }
 
 func TestVerifyFirefoxAddon(t *testing.T) {
-	fixture := pkcs7testing.UnmarshalTestFixture(FirefoxAddonFixture)
+	fixture := UnmarshalTestFixture(FirefoxAddonFixture)
 	p7, err := Parse(fixture.Input)
 	if err != nil {
 		t.Errorf("Parse encountered unexpected error: %v", err)
@@ -484,14 +482,14 @@ but that's not what ships are built for.
 		x509.ECDSAWithSHA512,
 	}
 	for _, sigalgroot := range sigalgs {
-		rootCert, err := pkcs7testing.CreateTestCertificateByIssuer("PKCS7 Test Root CA", nil, sigalgroot, true)
+		rootCert, err := createTestCertificateByIssuer("PKCS7 Test Root CA", nil, sigalgroot, true)
 		if err != nil {
 			t.Fatalf("test %s: cannot generate root cert: %s", sigalgroot, err)
 		}
 		truststore := x509.NewCertPool()
 		truststore.AddCert(rootCert.Certificate)
 		for _, sigalginter := range sigalgs {
-			interCert, err := pkcs7testing.CreateTestCertificateByIssuer("PKCS7 Test Intermediate Cert", rootCert, sigalginter, true)
+			interCert, err := createTestCertificateByIssuer("PKCS7 Test Intermediate Cert", rootCert, sigalginter, true)
 			if err != nil {
 				t.Fatalf("test %s/%s: cannot generate intermediate cert: %s", sigalgroot, sigalginter, err)
 			}
@@ -507,7 +505,7 @@ but that's not what ships are built for.
 			pem.Encode(fd, &pem.Block{Type: "CERTIFICATE", Bytes: interCert.Certificate.Raw})
 			fd.Close()
 			for _, sigalgsigner := range sigalgs {
-				signerCert, err := pkcs7testing.CreateTestCertificateByIssuer("PKCS7 Test Signer Cert", interCert, sigalgsigner, false)
+				signerCert, err := createTestCertificateByIssuer("PKCS7 Test Signer Cert", interCert, sigalgsigner, false)
 				if err != nil {
 					t.Fatalf("test %s/%s/%s: cannot generate signer cert: %s", sigalgroot, sigalginter, sigalgsigner, err)
 				}
@@ -623,7 +621,7 @@ func TestVerifySignedData_NoAuthAttrs(t *testing.T) {
 	cert := x509.Certificate{}
 	p7Content := []byte("abc123")
 	signer := signerInfo{}
-	signedData, err := verifySignedData(&cert, p7Content, signer, time.Now())
+	signedData, err := verifySignedData(&cert, p7Content, signer)
 
 	if err != nil {
 		t.Fatal("Expected err to be nil: %w", err)
@@ -636,7 +634,7 @@ func TestVerifySignedData_NoAuthAttrs(t *testing.T) {
 
 func TestVerifySignedData_AuthAttrDoesntMatchOID(t *testing.T) {
 	cert := x509.Certificate{}
-	fixture := pkcs7testing.UnmarshalTestFixture(FirefoxAddonFixture)
+	fixture := UnmarshalTestFixture(FirefoxAddonFixture)
 	p7, err := Parse(fixture.Input)
 
 	signer := p7.Signers[0]
@@ -646,7 +644,7 @@ func TestVerifySignedData_AuthAttrDoesntMatchOID(t *testing.T) {
 	}
 	signer.AuthenticatedAttributes = []attribute{dummyAttribute}
 
-	signedData, err := verifySignedData(&cert, p7.Content, signer, time.Now())
+	signedData, err := verifySignedData(&cert, p7.Content, signer)
 
 	if signedData != nil {
 		t.Fatalf("Expected signedData to be nil: %v", signedData)
@@ -658,31 +656,31 @@ func TestVerifySignedData_AuthAttrDoesntMatchOID(t *testing.T) {
 
 func TestVerifySignedData_NoMatchingOIDHash(t *testing.T) {
 	cert := x509.Certificate{}
-	fixture := pkcs7testing.UnmarshalTestFixture(FirefoxAddonFixture)
+	fixture := UnmarshalTestFixture(FirefoxAddonFixture)
 	p7, err := Parse(fixture.Input)
 
 	signer := p7.Signers[0]
 	signer.DigestAlgorithm.Algorithm = []int{1,2,3,4,5}
 
-	signedData, err := verifySignedData(&cert, p7.Content, signer, time.Now())
+	signedData, err := verifySignedData(&cert, p7.Content, signer)
 
 	if signedData != nil {
 		t.Fatalf("Expected signedData to be nil: %v", signedData)
 	}
-	if err == nil {
-		t.Fatal("Expected error not to be nil")
+	if err != ErrUnsupportedAlgorithm {
+		t.Fatalf("Expected error to be ErrUnsupportedAlgorithm, actual err: %v", err)
 	}
 }
 
 func TestVerifySignedData_NoMatchingDigest(t *testing.T) {
 	cert := x509.Certificate{}
-	fixture := pkcs7testing.UnmarshalTestFixture(FirefoxAddonFixture)
+	fixture := UnmarshalTestFixture(FirefoxAddonFixture)
 	p7, err := Parse(fixture.Input)
 
 	signer := p7.Signers[0]
 	p7Content := []byte("abc124")
 
-	signedData, err := verifySignedData(&cert, p7Content, signer, time.Now())
+	signedData, err := verifySignedData(&cert, p7Content, signer)
 
 	if signedData != nil {
 		t.Fatalf("Expected signedData to be nil: %v", signedData)
@@ -694,20 +692,12 @@ func TestVerifySignedData_NoMatchingDigest(t *testing.T) {
 }
 
 func TestVerifySignedData_SigningTimeNotValid(t *testing.T) {
-	fixture := pkcs7testing.UnmarshalTestFixture(SignedTestFixture)
+	fixture := UnmarshalTestFixture(SignedTestFixture)
 	p7, err := Parse(fixture.Input)
 	signer := p7.Signers[0]
-
-	signingTime := time.Now()
-	duration, err := time.ParseDuration("-1.5h")
-	if err != nil {
-		t.Fatalf("Unexpected failure while parsing duration")
-	}	
-	
 	ee := GetCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
-	ee.NotAfter = signingTime.Add(duration)
-
-	signedData, err := verifySignedData(ee, p7.Content, signer, signingTime)
+	
+	signedData, err := verifySignedData(ee, p7.Content, signer)
 
 	_, ok := err.(*ErrSigningTimeNotValid)
 	if !ok {
@@ -719,12 +709,12 @@ func TestVerifySignedData_SigningTimeNotValid(t *testing.T) {
 }
 
 func TestVerifySignedData_Success(t *testing.T) {
-	fixture := pkcs7testing.UnmarshalTestFixture(SignedTestFixture)
+	fixture := UnmarshalTestFixture(SignedTestFixture)
 	p7, err := Parse(fixture.Input)
 	signer := p7.Signers[0]
 	ee := GetCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 
-	signedData, err := verifySignedData(ee, p7.Content, signer, time.Now())
+	signedData, err := verifySignedData(ee, p7.Content, signer)
 	if err != nil {
 		t.Fatalf("Expected err to be nil: %v", err)
 	}
@@ -733,4 +723,18 @@ func TestVerifySignedData_Success(t *testing.T) {
 	}
 }
 
-func TestVerifyCertChain(t *testing.T) {}
+func TestVerifySignature_SelfSigned_Success(t *testing.T) {
+	fixture := UnmarshalTestFixture(SignedTestFixture)
+	p7, err := Parse(fixture.Input)
+	signer := p7.Signers[0]
+	ee := GetCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
+	
+	truststore := x509.NewCertPool()
+	truststore.AddCert(p7.Certificates[0])
+
+	signingTime, err := time.Parse(time.RFC3339, "2016-05-06T01:24:48Z")
+	err = verifySignature(ee, p7, signer, truststore, signingTime)
+	if err != nil {
+		t.Fatalf("Expected err to be nil: %v", err)
+	}
+}
