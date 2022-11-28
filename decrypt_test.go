@@ -3,12 +3,10 @@ package pkcs7
 import (
 	"bytes"
 	"testing"
-
-	pkcs7testing "github.com/digitorus/pkcs7/testing"
 )
 
 func TestDecrypt(t *testing.T) {
-	fixture := pkcs7testing.UnmarshalTestFixture(EncryptedTestFixture)
+	fixture := UnmarshalTestFixture(EncryptedTestFixture)
 	p7, err := Parse(fixture.Input)
 	if err != nil {
 		t.Fatal(err)
