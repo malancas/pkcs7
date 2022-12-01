@@ -17,6 +17,27 @@ import (
 	"time"
 )
 
+func createSignedData(data []byte, pair *certKeyPair) ([]byte, error) {
+	toBeSigned, err := NewSignedData(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create SignedData from test data: %v", err)
+	}
+
+	signerDigest, _ := getDigestOIDForSignatureAlgorithm(pair.Certificate.SignatureAlgorithm)
+	toBeSigned.SetDigestAlgorithm(signerDigest)
+
+	if err := toBeSigned.SignWithoutAttr(pair.Certificate, (*pair.PrivateKey).(crypto.Signer), SignerInfoConfig{}); err != nil {
+		return nil, fmt.Errorf("failed to sign: %v", err)
+	}
+
+	finished, err := toBeSigned.Finish()
+	if err != nil {
+		return nil, fmt.Errorf("failed to finish data from signed data structure: %v", err)
+	}
+
+	return finished, nil
+}
+
 func TestVerify(t *testing.T) {
 	fixture := UnmarshalTestFixture(SignedTestFixture)
 	p7, err := Parse(fixture.Input)
@@ -619,8 +640,6 @@ but that's not what ships are built for.
 	os.Remove(tmpContentFile.Name()) // clean up
 }
 
-
-
 func TestVerifySignedData_NoAuthAttrs(t *testing.T) {
 	cert := x509.Certificate{}
 	p7Content := []byte("abc123")
@@ -743,27 +762,6 @@ func TestVerifySignature_SelfSigned_Success(t *testing.T) {
 	}
 }
 
-func createSignedData(data []byte, pair *certKeyPair) ([]byte, error) {
-	toBeSigned, err := NewSignedData(data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create SignedData from test data: %v", err)
-	}
-
-	signerDigest, _ := getDigestOIDForSignatureAlgorithm(pair.Certificate.SignatureAlgorithm)
-	toBeSigned.SetDigestAlgorithm(signerDigest)
-
-	if err := toBeSigned.SignWithoutAttr(pair.Certificate, (*pair.PrivateKey).(crypto.Signer), SignerInfoConfig{}); err != nil {
-		return nil, fmt.Errorf("failed to sign: %v", err)
-	}
-
-	finished, err := toBeSigned.Finish()
-	if err != nil {
-		return nil, fmt.Errorf("failed to finish data from signed data structure: %v", err)
-	}
-
-	return finished, nil
-}
-
 func TestVerifySignatureWithCertPools_Success(t *testing.T) {
 	certChain, err := createCertChain(x509.SHA256WithRSA)
 	if err != nil {
@@ -796,5 +794,81 @@ func TestVerifySignatureWithCertPools_Success(t *testing.T) {
 	err = verifySignatureWithCertPools(certChain.leaf.Certificate, p7, signer, pools, time.Now())
 	if err != nil {	
 		t.Fatalf("Expected err to be nil: %v", err)
+	}
+}
+
+func TestVerifySignatureWithCertPools_CannotVerifyCertChain(t *testing.T) {
+	certChain, err := createCertChain(x509.SHA256WithRSA)
+	if err != nil {
+		t.Fatalf("failed to create cert chain: %v", err)
+	}
+
+	rootsPool := x509.NewCertPool()
+	unconnectedCert := x509.Certificate{}
+	rootsPool.AddCert(&unconnectedCert)
+
+	intermediatesPool := x509.NewCertPool()
+	intermediatesPool.AddCert(certChain.intermediate.Certificate)
+	
+	pools := certPools{
+		Roots: rootsPool,
+		Intermediates: intermediatesPool,
+	}
+
+	data := []byte("blob")
+	signed, err := createSignedData(data, certChain.leaf)
+	if err != nil {
+		t.Fatalf("failed to create signed data: %v", err)
+	}
+
+	p7, err := Parse(signed)
+	if err != nil {
+		t.Fatalf("failed to parse pkcs7 structure from signed data: %v", err)
+	}
+
+	signer := p7.Signers[0]
+	err = verifySignatureWithCertPools(certChain.leaf.Certificate, p7, signer, pools, time.Now())
+	if err == nil {	
+		t.Fatalf("Expected verification to fail: %v", err)
+	}
+}
+
+func TestVerifySignatureWithCertPools_CannotVerifySignature(t *testing.T) {
+	certChain, err := createCertChain(x509.SHA256WithRSA)
+	if err != nil {
+		t.Fatalf("failed to create cert chain: %v", err)
+	}
+
+	rootsPool := x509.NewCertPool()
+	rootsPool.AddCert(certChain.root.Certificate)
+
+	intermediatesPool := x509.NewCertPool()
+	intermediatesPool.AddCert(certChain.intermediate.Certificate)
+	
+	pools := certPools{
+		Roots: rootsPool,
+		Intermediates: intermediatesPool,
+	}
+
+	pair, err := createTestCertificate(x509.SHA512WithRSA)
+	if err != nil {
+		t.Fatalf("failed to create cert and key pair: %v", err)
+	}
+
+	data := []byte("blob")
+	signed, err := createSignedData(data, &pair)
+	if err != nil {
+		t.Fatalf("failed to create signed data: %v", err)
+	}
+
+	p7, err := Parse(signed)
+	if err != nil {
+		t.Fatalf("failed to parse pkcs7 structure from signed data: %v", err)
+	}
+
+	signer := p7.Signers[0]
+	err = verifySignatureWithCertPools(certChain.leaf.Certificate, p7, signer, pools, time.Now())
+	if err == nil {	
+		t.Fatalf("Expected verification to fail: %v", err)
 	}
 }
