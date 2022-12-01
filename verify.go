@@ -129,7 +129,7 @@ func verifySignature(ee *x509.Certificate, p7 *PKCS7, signer signerInfo, trustst
 		Roots: truststore,
 	}
 	if truststore != nil {
-		_, err = VerifyCertChain(ee, pools, signingTime)
+		_, err = verifyCertChain(ee, pools, signingTime)
 		if err != nil {
 			return err
 		}
@@ -147,7 +147,7 @@ func verifySignatureWithCertPools(ee *x509.Certificate, p7 *PKCS7, signer signer
 		return err
 	}
 	if pools.Roots != nil && pools.Intermediates != nil {
-		_, err = VerifyCertChain(ee, pools, signingTime)
+		_, err = verifyCertChain(ee, pools, signingTime)
 		if err != nil {
 			return err
 		}
@@ -271,7 +271,7 @@ func parseSignedData(data []byte) (*PKCS7, error) {
 //
 // When verifying chains that may have expired, currentTime can be set to a past date
 // to allow the verification to pass. If unset, currentTime is set to the current UTC time.
-func VerifyCertChain(ee *x509.Certificate, pools certPools, currentTime time.Time) (chains [][]*x509.Certificate, err error) {
+func verifyCertChain(ee *x509.Certificate, pools certPools, currentTime time.Time) (chains [][]*x509.Certificate, err error) {
 	verifyOptions := x509.VerifyOptions{
 		Roots:         pools.Roots,
 		Intermediates: pools.Intermediates,

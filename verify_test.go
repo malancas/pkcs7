@@ -316,7 +316,7 @@ func TestVerifyFirefoxAddon(t *testing.T) {
 		Roots: certPool,
 		Intermediates: intermediates,
 	}
-	chains, err := VerifyCertChain(ee, pools, signingTime)
+	chains, err := verifyCertChain(ee, pools, signingTime)
 	if err != nil {
 		t.Error(err)
 	}
@@ -612,7 +612,7 @@ but that's not what ships are built for.
 					Roots: truststore,
 					Intermediates: intermediates,
 				}
-				chains, err := VerifyCertChain(ee, pools, time.Now())
+				chains, err := verifyCertChain(ee, pools, time.Now())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -797,7 +797,7 @@ func TestVerifySignatureWithCertPools_Success(t *testing.T) {
 	}
 }
 
-func TestVerifySignatureWithCertPools_CannotVerifyCertChain(t *testing.T) {
+func TestVerifySignatureWithCertPools_CannotverifyCertChain(t *testing.T) {
 	certChain, err := createCertChain(x509.SHA256WithRSA)
 	if err != nil {
 		t.Fatalf("failed to create cert chain: %v", err)
