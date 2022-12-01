@@ -9,6 +9,7 @@ import (
 	"encoding/asn1"
 	"encoding/base64"
 	"encoding/pem"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -618,6 +619,8 @@ but that's not what ships are built for.
 	os.Remove(tmpContentFile.Name()) // clean up
 }
 
+
+
 func TestVerifySignedData_NoAuthAttrs(t *testing.T) {
 	cert := x509.Certificate{}
 	p7Content := []byte("abc123")
@@ -740,43 +743,51 @@ func TestVerifySignature_SelfSigned_Success(t *testing.T) {
 	}
 }
 
-func TestVerifySignatureWithCertPools_Success(t *testing.T) {
-	data := []byte("blob")
+func createSignedData(data []byte, pair *certKeyPair) ([]byte, error) {
 	toBeSigned, err := NewSignedData(data)
 	if err != nil {
-		t.Fatalf("failed to create SignedData from test data %v", data)
+		return nil, fmt.Errorf("failed to create SignedData from test data: %v", err)
 	}
 
+	signerDigest, _ := getDigestOIDForSignatureAlgorithm(pair.Certificate.SignatureAlgorithm)
+	toBeSigned.SetDigestAlgorithm(signerDigest)
+
+	if err := toBeSigned.SignWithoutAttr(pair.Certificate, (*pair.PrivateKey).(crypto.Signer), SignerInfoConfig{}); err != nil {
+		return nil, fmt.Errorf("failed to sign: %v", err)
+	}
+
+	finished, err := toBeSigned.Finish()
+	if err != nil {
+		return nil, fmt.Errorf("failed to finish data from signed data structure: %v", err)
+	}
+
+	return finished, nil
+}
+
+func TestVerifySignatureWithCertPools_Success(t *testing.T) {
 	certChain, err := createCertChain(x509.SHA256WithRSA)
 	if err != nil {
 		t.Fatalf("failed to create cert chain: %v", err)
 	}
 
-	signerDigest, _ := getDigestOIDForSignatureAlgorithm(certChain.leaf.Certificate.SignatureAlgorithm)
-	toBeSigned.SetDigestAlgorithm(signerDigest)
+	rootsPool := x509.NewCertPool()
+	rootsPool.AddCert(certChain.root.Certificate)
 
-	if err := toBeSigned.SignWithoutAttr(certChain.leaf.Certificate, (*certChain.leaf.PrivateKey).(crypto.Signer), SignerInfoConfig{}); err != nil {
-		t.Fatal("test: cannot add signer")
-		// t.Fatalf("test %s/%s: cannot add signer: %s", sigalgroot, sigalgsigner, err)
-	}
-
-	intermediates := x509.NewCertPool()
-	intermediates.AddCert(certChain.intermediate.Certificate)
+	intermediatesPool := x509.NewCertPool()
+	intermediatesPool.AddCert(certChain.intermediate.Certificate)
 	
-	truststore := x509.NewCertPool()
-	truststore.AddCert(certChain.root.Certificate)
-
 	pools := certPools{
-		Roots: truststore,
-		Intermediates: intermediates,
+		Roots: rootsPool,
+		Intermediates: intermediatesPool,
 	}
 
-	finished, err := toBeSigned.Finish()
+	data := []byte("blob")
+	signed, err := createSignedData(data, certChain.leaf)
 	if err != nil {
-		t.Fatalf("failed to finish data from signed data structure: %v", err)
+		t.Fatalf("failed to create signed data: %v", err)
 	}
 
-	p7, err := Parse(finished)
+	p7, err := Parse(signed)
 	if err != nil {
 		t.Fatalf("failed to parse pkcs7 structure from signed data: %v", err)
 	}
