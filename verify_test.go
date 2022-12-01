@@ -283,7 +283,7 @@ func TestVerifyFirefoxAddon(t *testing.T) {
 
 	// Verify the certificate chain to make sure the identified root
 	// is the one we expect
-	ee := GetCertFromCertsByIssuerAndSerial(p7.Certificates, p7.Signers[0].IssuerAndSerialNumber)
+	ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, p7.Signers[0].IssuerAndSerialNumber)
 	if ee == nil {
 		t.Errorf("No end-entity certificate found for signer")
 	}
@@ -580,7 +580,7 @@ but that's not what ships are built for.
 				}
 				// Verify the certificate chain to make sure the identified root
 				// is the one we expect
-				ee := GetCertFromCertsByIssuerAndSerial(p7.Certificates, p7.Signers[0].IssuerAndSerialNumber)
+				ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, p7.Signers[0].IssuerAndSerialNumber)
 				if ee == nil {
 					t.Fatalf("No end-entity certificate found for signer")
 				}
@@ -696,7 +696,7 @@ func TestVerifySignedData_SigningTimeNotValid(t *testing.T) {
 	fixture := UnmarshalTestFixture(SignedTestFixture)
 	p7, err := Parse(fixture.Input)
 	signer := p7.Signers[0]
-	ee := GetCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
+	ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 	
 	signedData, err := verifySignedData(ee, p7.Content, signer)
 
@@ -713,7 +713,7 @@ func TestVerifySignedData_Success(t *testing.T) {
 	fixture := UnmarshalTestFixture(SignedTestFixture)
 	p7, err := Parse(fixture.Input)
 	signer := p7.Signers[0]
-	ee := GetCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
+	ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 
 	signedData, err := verifySignedData(ee, p7.Content, signer)
 	if err != nil {
@@ -728,7 +728,7 @@ func TestVerifySignature_SelfSigned_Success(t *testing.T) {
 	fixture := UnmarshalTestFixture(SignedTestFixture)
 	p7, err := Parse(fixture.Input)
 	signer := p7.Signers[0]
-	ee := GetCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
+	ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 	
 	truststore := x509.NewCertPool()
 	truststore.AddCert(p7.Certificates[0])

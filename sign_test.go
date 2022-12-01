@@ -181,7 +181,6 @@ func TestSignWithoutAttributes(t *testing.T) {
 				t.Fatalf("test %s/%s: cannot generate signer cert: %s", sigalgroot, sigalgsigner, err)
 			}
 			for _, testDetach := range []bool{false, true} {
-				// log.Printf("test %s/%s/%s detached %t\n", sigalgroot, sigalgroot, sigalgsigner, testDetach)
 				toBeSigned, err := NewSignedData(content)
 				if err != nil {
 					t.Fatalf("test %s/%s: cannot initialize signed data: %s", sigalgroot, sigalgsigner, err)

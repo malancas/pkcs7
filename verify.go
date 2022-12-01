@@ -73,7 +73,7 @@ func (p7 *PKCS7) VerifyWithChainAtTime(truststore *x509.CertPool, currentTime ti
 		return errors.New("pkcs7: Message has no signers")
 	}
 	for _, signer := range p7.Signers {
-		ee := GetCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
+		ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 		if ee == nil {
 			return errors.New("pkcs7: No certificate for signer")
 		}
@@ -101,7 +101,7 @@ func (p7 *PKCS7) VerifyWithCertPools(pools certPools, leafCert *x509.Certificate
 		}
 	}
 	for _, signer := range p7.Signers {
-		ee := GetCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
+		ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 		if ee == nil {
 			return errors.New("pkcs7: No certificate for signer")
 		}
@@ -212,7 +212,7 @@ func (p7 *PKCS7) GetOnlySigner() *x509.Certificate {
 		return nil
 	}
 	signer := p7.Signers[0]
-	return GetCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
+	return getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 }
 
 // UnmarshalSignedAttribute decodes a single attribute from the signer info
@@ -348,7 +348,7 @@ func getSignatureAlgorithm(digestEncryption, digest pkix.AlgorithmIdentifier) (x
 	}
 }
 
-func GetCertFromCertsByIssuerAndSerial(certs []*x509.Certificate, ias issuerAndSerial) *x509.Certificate {
+func getCertFromCertsByIssuerAndSerial(certs []*x509.Certificate, ias issuerAndSerial) *x509.Certificate {
 	for _, cert := range certs {
 		if isCertMatchForIssuerAndSerial(cert, ias) {
 			return cert
