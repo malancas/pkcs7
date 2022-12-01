@@ -90,6 +90,12 @@ func (p7 *PKCS7) VerifyWithCertPools(pools certPools, leafCert *x509.Certificate
 		return errors.New("pkcs7: Message has no signers")
 	}
 	if leafCert != nil {
+		if eku != 0 {
+			err := verifyEKU(leafCert, eku)
+			if err != nil {
+				return err
+			}
+		}
 		for _, signer := range p7.Signers {
 			if !isCertMatchForIssuerAndSerial(leafCert, signer.IssuerAndSerialNumber) {
 				return errors.New("pkcs7: leaf certificate does not match signer")
@@ -110,6 +116,19 @@ func (p7 *PKCS7) VerifyWithCertPools(pools certPools, leafCert *x509.Certificate
 		if err := verifySignatureWithCertPools(ee, p7, signer, pools, signingTime); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func verifyEKU(cert *x509.Certificate, expectedEKU x509.ExtKeyUsage) error {
+	var found bool
+	for _, eku := range cert.ExtKeyUsage {
+		if eku == expectedEKU {
+			found = true
+		}
+	}
+	if !found {
+		return errors.New(fmt.Sprintf("certificate must set EKU to %d", expectedEKU))
 	}
 	return nil
 }
