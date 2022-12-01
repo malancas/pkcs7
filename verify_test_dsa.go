@@ -5,7 +5,6 @@ package pkcs7
 import (
 	"crypto/x509"
 	"encoding/pem"
-	// "fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
