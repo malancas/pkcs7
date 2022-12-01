@@ -2,12 +2,14 @@ package pkcs7
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/asn1"
 	"encoding/base64"
 	"encoding/pem"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -735,6 +737,51 @@ func TestVerifySignature_SelfSigned_Success(t *testing.T) {
 	signingTime, err := time.Parse(time.RFC3339, "2016-05-06T01:24:48Z")
 	err = verifySignature(ee, p7, signer, truststore, signingTime)
 	if err != nil {
+		t.Fatalf("Expected err to be nil: %v", err)
+	}
+}
+
+func TestVerifySignatureWithCertPools_Success(t *testing.T) {
+	data := []byte("blob")
+	toBeSigned, err := NewSignedData(data)
+	if err != nil {
+		t.Fatalf("failed to create SignedData from test data %v", data)
+	}
+
+	certChain := createCertChain(t, x509.SHA256WithRSA)
+
+	signerDigest, _ := getDigestOIDForSignatureAlgorithm(certChain.leaf.Certificate.SignatureAlgorithm)
+	toBeSigned.SetDigestAlgorithm(signerDigest)
+
+	if err := toBeSigned.SignWithoutAttr(certChain.leaf.Certificate, (*certChain.leaf.PrivateKey).(crypto.Signer), SignerInfoConfig{}); err != nil {
+		t.Fatal("test: cannot add signer")
+		// t.Fatalf("test %s/%s: cannot add signer: %s", sigalgroot, sigalgsigner, err)
+	}
+
+	intermediates := x509.NewCertPool()
+	intermediates.AddCert(certChain.intermediate.Certificate)
+	
+	truststore := x509.NewCertPool()
+	truststore.AddCert(certChain.root.Certificate)
+
+	pools := certPools{
+		Roots: truststore,
+		Intermediates: intermediates,
+	}
+
+	finished, err := toBeSigned.Finish()
+	if err != nil {
+		t.Fatalf("failed to finish data from signed data structure: %v", err)
+	}
+
+	p7, err := Parse(finished)
+	if err != nil {
+		t.Fatalf("failed to parse pkcs7 structure from signed data: %v", err)
+	}
+
+	signer := p7.Signers[0]
+	err = verifySignatureWithCertPools(certChain.leaf.Certificate, p7, signer, pools, time.Now())
+	if err != nil {	
 		t.Fatalf("Expected err to be nil: %v", err)
 	}
 }
