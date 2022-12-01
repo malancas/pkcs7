@@ -375,57 +375,30 @@ func UnmarshalTestFixture(testPEMBlock string) TestFixture {
 }
 
 type certChain struct {
-	root *x509.Certificate
-	intermediate *x509.Certificate
-	leaf *x509.Certificate
+	root *certKeyPair
+	intermediate *certKeyPair
+	leaf *certKeyPair
 }
 
-func createCertChain(t *testing.T) certChain {
-	rootPair, err := createTestCertificateByIssuer("test root", nil, x509.SHA256WithRSA, true)
+func createCertChain(t *testing.T, alg x509.SignatureAlgorithm) certChain {
+	rootPair, err := createTestCertificateByIssuer("test root", nil, alg, true)
 	if err != nil {
 		t.Fatalf("Unexpected failure when creating root cert: %v", err)
 	}
 
-	intermediatePair, err := createTestCertificateByIssuer("test intermediate", rootPair, x509.SHA256WithRSA, false)
+	intermediatePair, err := createTestCertificateByIssuer("test intermediate", rootPair, alg, true)
 	if err != nil {
 		t.Fatalf("Unexpected failure when creating intermediate cert: %v", err)
 	}
 
-	leafPair, err := createTestCertificateByIssuer("test leaf", intermediatePair, x509.SHA256WithRSA, false)
+	leafPair, err := createTestCertificateByIssuer("test leaf", intermediatePair, alg, false)
 	if err != nil {
 		t.Fatalf("Unexpected failure when creating leaf cert: %v", err)
 	}
 
 	return certChain{
-		root: rootPair.Certificate,
-		intermediate: intermediatePair.Certificate,
-		leaf: leafPair.Certificate,
-	}
-}
-
-func createPkcs7(chain certChain) PKCS7 {
-	signers := make([]signerInfo, 1)
-	signers[0] = buildSigner(chain.leaf)
-	
-	p7 := PKCS7{
-		Certificates: []*x509.Certificate{chain.leaf, chain.intermediate},
-		Signers: signers,
-	}
-	return p7
-}
-
-func buildSigner(cert *x509.Certificate) signerInfo {
-	issuerAndSerialNumber := issuerAndSerial{
-		SerialNumber: cert.SerialNumber,
-	}
-
-	return signerInfo {
-		Version: cert.Version,
-		IssuerAndSerialNumber: issuerAndSerialNumber,
-		DigestAlgorithm: cert.SignatureAlgorithm,
-		AuthenticatedAttributes: cert.AuthenticatedAttributes,
-		DigestEncryptionAlgorithm: cert.DigestEncryptionAlgorithm,
-		EncryptedDigest: cert.EncryptedDigest,
-		UnauthenticatedAttributes: cert.UnauthenticatedAttributes,
+		root: rootPair,
+		intermediate: intermediatePair,
+		leaf: leafPair,
 	}
 }
