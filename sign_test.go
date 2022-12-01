@@ -47,7 +47,6 @@ func TestSign(t *testing.T) {
 					t.Fatalf("test %s/%s/%s: cannot generate signer cert: %s", sigalgroot, sigalginter, sigalgsigner, err)
 				}
 				for _, testDetach := range []bool{false, true} {
-					// log.Printf("test %s/%s/%s detached %t\n", sigalgroot, sigalginter, sigalgsigner, testDetach)
 					toBeSigned, err := NewSignedData(content)
 					if err != nil {
 						t.Fatalf("test %s/%s/%s: cannot initialize signed data: %s", sigalgroot, sigalginter, sigalgsigner, err)
@@ -248,11 +247,10 @@ func ExampleSignedData() {
 	signedData.Detach()
 
 	// Finish() to obtain the signature bytes
-	// detachedSignature, err := signedData.Finish()
-	// if err != nil {
-	// 	fmt.Printf("Cannot finish signing data: %s", err)
-	// }
-	// pem.Encode(os.Stdout, &pem.Block{Type: "PKCS7", Bytes: detachedSignature})
+	_, err = signedData.Finish()
+	if err != nil {
+		fmt.Printf("Cannot finish signing data: %s", err)
+	}
 }
 
 func TestSetContentType(t *testing.T) {
@@ -329,7 +327,6 @@ func TestDegenerateCertificate(t *testing.T) {
 		t.Fatal(err)
 	}
 	testOpenSSLParse(t, deg)
-	// pem.Encode(os.Stdout, &pem.Block{Type: "PKCS7", Bytes: deg})
 }
 
 func TestSkipCertificates(t *testing.T) {

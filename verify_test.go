@@ -9,7 +9,6 @@ import (
 	"encoding/asn1"
 	"encoding/base64"
 	"encoding/pem"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -748,7 +747,10 @@ func TestVerifySignatureWithCertPools_Success(t *testing.T) {
 		t.Fatalf("failed to create SignedData from test data %v", data)
 	}
 
-	certChain := createCertChain(t, x509.SHA256WithRSA)
+	certChain, err := createCertChain(x509.SHA256WithRSA)
+	if err != nil {
+		t.Fatalf("failed to create cert chain: %v", err)
+	}
 
 	signerDigest, _ := getDigestOIDForSignatureAlgorithm(certChain.leaf.Certificate.SignatureAlgorithm)
 	toBeSigned.SetDigestAlgorithm(signerDigest)

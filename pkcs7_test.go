@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"math/big"
 	"time"
-	"testing"
 )
 
 var test1024Key, test2048Key, test3072Key, test4096Key *rsa.PrivateKey
@@ -339,7 +338,7 @@ func createTestCertificateByIssuer(name string, issuer *certKeyPair, sigAlg x509
 	if err != nil {
 		return nil, err
 	}
-	// pem.Encode(os.Stdout, &pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
+
 	return &certKeyPair{
 		Certificate: cert,
 		PrivateKey:  &priv,
@@ -380,25 +379,25 @@ type certChain struct {
 	leaf *certKeyPair
 }
 
-func createCertChain(t *testing.T, alg x509.SignatureAlgorithm) certChain {
+func createCertChain(alg x509.SignatureAlgorithm) (certChain, error) {
 	rootPair, err := createTestCertificateByIssuer("test root", nil, alg, true)
 	if err != nil {
-		t.Fatalf("Unexpected failure when creating root cert: %v", err)
+		return certChain{}, err
 	}
 
 	intermediatePair, err := createTestCertificateByIssuer("test intermediate", rootPair, alg, true)
 	if err != nil {
-		t.Fatalf("Unexpected failure when creating intermediate cert: %v", err)
+		return certChain{}, err
 	}
 
 	leafPair, err := createTestCertificateByIssuer("test leaf", intermediatePair, alg, false)
 	if err != nil {
-		t.Fatalf("Unexpected failure when creating leaf cert: %v", err)
+		return certChain{}, err
 	}
 
 	return certChain{
 		root: rootPair,
 		intermediate: intermediatePair,
 		leaf: leafPair,
-	}
+	}, nil
 }
