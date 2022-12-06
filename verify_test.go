@@ -245,11 +245,20 @@ func TestVerifyFirefoxAddon(t *testing.T) {
 		t.Errorf("Parse encountered unexpected error: %v", err)
 	}
 	p7.Content = FirefoxAddonContent
-	certPool := x509.NewCertPool()
-	certPool.AppendCertsFromPEM(FirefoxAddonRootCert)
+
 	opts := x509.VerifyOptions{
-		Roots: certPool,
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
 	}
+
+	roots := x509.NewCertPool()
+	roots.AppendCertsFromPEM(FirefoxAddonRootCert)
+	opts.Roots = roots
+
+	intermediates := x509.NewCertPool()
+	for _, cert := range(p7.Certificates) {
+		intermediates.AddCert(cert)
+	}
+	opts.Intermediates = intermediates
 
 	// verifies at the signingTime authenticated attr
 	if err := p7.VerifyWithChain(opts); err != nil {
@@ -289,7 +298,7 @@ func TestVerifyFirefoxAddon(t *testing.T) {
 	signingTime := mustParseTime("2017-02-23T09:06:16-05:00")
 	opts.CurrentTime = signingTime
 
-	intermediates := x509.NewCertPool()
+	intermediates = x509.NewCertPool()
 	for _, cert := range(p7.Certificates) {
 		intermediates.AddCert(cert)
 	}
