@@ -247,8 +247,12 @@ func TestVerifyFirefoxAddon(t *testing.T) {
 	p7.Content = FirefoxAddonContent
 	certPool := x509.NewCertPool()
 	certPool.AppendCertsFromPEM(FirefoxAddonRootCert)
+	opts := x509.VerifyOptions{
+		Roots: certPool,
+	}
+
 	// verifies at the signingTime authenticated attr
-	if err := p7.VerifyWithChain(certPool); err != nil {
+	if err := p7.VerifyWithChain(opts); err != nil {
 		t.Errorf("Verify failed with error: %v", err)
 	}
 
@@ -258,16 +262,21 @@ func TestVerifyFirefoxAddon(t *testing.T) {
 	// Intermediate: 2015-03-17 23:52:42 +0000 UTC 2025-03-14 23:52:42 +0000 UTC
 	// Root:         2015-03-17 22:53:57 +0000 UTC 2025-03-14 22:53:57 +0000 UTC
 	validTime := time.Date(2021, 8, 16, 20, 0, 0, 0, time.UTC)
-	if err = p7.VerifyWithChainAtTime(certPool, validTime); err != nil {
+	opts.CurrentTime = validTime
+
+	if err = p7.VerifyWithChainAtTime(opts); err != nil {
 		t.Errorf("Verify at UTC now failed with error: %v", err)
 	}
 
 	expiredTime := time.Date(2030, time.January, 1, 0, 0, 0, 0, time.UTC)
-	if err = p7.VerifyWithChainAtTime(certPool, expiredTime); err == nil {
+	opts.CurrentTime = expiredTime
+	if err = p7.VerifyWithChainAtTime(opts); err == nil {
 		t.Errorf("Verify at expired time %s did not error", expiredTime)
 	}
+
 	notYetValidTime := time.Date(1999, time.July, 5, 0, 13, 0, 0, time.UTC)
-	if err = p7.VerifyWithChainAtTime(certPool, notYetValidTime); err == nil {
+	opts.CurrentTime = notYetValidTime
+	if err = p7.VerifyWithChainAtTime(opts); err == nil {
 		t.Errorf("Verify at not yet valid time %s did not error", notYetValidTime)
 	}
 
@@ -278,7 +287,15 @@ func TestVerifyFirefoxAddon(t *testing.T) {
 		t.Errorf("No end-entity certificate found for signer")
 	}
 	signingTime := mustParseTime("2017-02-23T09:06:16-05:00")
-	chains, err := verifyCertChain(ee, p7.Certificates, certPool, signingTime)
+	opts.CurrentTime = signingTime
+
+	intermediates := x509.NewCertPool()
+	for _, cert := range(p7.Certificates) {
+		intermediates.AddCert(cert)
+	}
+	opts.Intermediates = intermediates
+
+	chains, err := ee.Verify(opts)
 	if err != nil {
 		t.Error(err)
 	}
@@ -559,7 +576,11 @@ but that's not what ships are built for.
 				if err != nil {
 					t.Fatalf("Parse encountered unexpected error: %v", err)
 				}
-				if err := p7.VerifyWithChain(truststore); err != nil {
+
+				opts := x509.VerifyOptions{
+					Roots: truststore,
+				}
+				if err := p7.VerifyWithChain(opts); err != nil {
 					t.Fatalf("Verify failed with error: %v", err)
 				}
 				// Verify the certificate chain to make sure the identified root
@@ -568,7 +589,15 @@ but that's not what ships are built for.
 				if ee == nil {
 					t.Fatalf("No end-entity certificate found for signer")
 				}
-				chains, err := verifyCertChain(ee, p7.Certificates, truststore, time.Now())
+
+				opts.CurrentTime = time.Now()
+				intermediates := x509.NewCertPool()
+				for _, cert := range(p7.Certificates) {
+					intermediates.AddCert(cert)
+				}
+				opts.Intermediates = intermediates
+			
+				chains, err := ee.Verify(opts)
 				if err != nil {
 					t.Fatal(err)
 				}

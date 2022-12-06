@@ -14,7 +14,7 @@ import (
 // trust store, effectively disabling certificate verification when validating
 // a signature.
 func (p7 *PKCS7) Verify() (err error) {
-	return p7.VerifyWithChain(nil)
+	return p7.VerifyWithChain(x509.VerifyOptions{})
 }
 
 // VerifyWithChain checks the signatures of a PKCS7 object.
@@ -24,12 +24,12 @@ func (p7 *PKCS7) Verify() (err error) {
 // truststore. When the PKCS7 object includes the signing time
 // authenticated attr verifies the chain at that time and UTC now
 // otherwise.
-func (p7 *PKCS7) VerifyWithChain(truststore *x509.CertPool) (err error) {
+func (p7 *PKCS7) VerifyWithChain(opts x509.VerifyOptions) (err error) {
 	if len(p7.Signers) == 0 {
 		return errors.New("pkcs7: Message has no signers")
 	}
 	for _, signer := range p7.Signers {
-		if err := verifySignature(p7, signer, truststore); err != nil {
+		if err := verifySignature(p7, signer, opts); err != nil {
 			return err
 		}
 	}
@@ -42,19 +42,19 @@ func (p7 *PKCS7) VerifyWithChain(truststore *x509.CertPool) (err error) {
 // the end-entity signer cert to a root in the truststore at
 // currentTime. It does not use the signing time authenticated
 // attribute.
-func (p7 *PKCS7) VerifyWithChainAtTime(truststore *x509.CertPool, currentTime time.Time) (err error) {
+func (p7 *PKCS7) VerifyWithChainAtTime(opts x509.VerifyOptions) (err error) {
 	if len(p7.Signers) == 0 {
 		return errors.New("pkcs7: Message has no signers")
 	}
 	for _, signer := range p7.Signers {
-		if err := verifySignatureAtTime(p7, signer, truststore, currentTime); err != nil {
+		if err := verifySignatureAtTime(p7, signer, opts); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func verifySignatureAtTime(p7 *PKCS7, signer signerInfo, truststore *x509.CertPool, currentTime time.Time) (err error) {
+func verifySignatureAtTime(p7 *PKCS7, signer signerInfo, opts x509.VerifyOptions) (err error) {
 	signedData := p7.Content
 	ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 	if ee == nil {
@@ -98,10 +98,10 @@ func verifySignatureAtTime(p7 *PKCS7, signer signerInfo, truststore *x509.CertPo
 			}
 		}
 	}
-	if truststore != nil {
-		_, err = verifyCertChain(ee, p7.Certificates, truststore, currentTime)
+	if opts.Roots != nil {
+		_, err = ee.Verify(opts)
 		if err != nil {
-			return err
+			return fmt.Errorf("pkcs7: failed to verify certificate chain: %v", err)
 		}
 	}
 	sigalg, err := getSignatureAlgorithm(signer.DigestEncryptionAlgorithm, signer.DigestAlgorithm)
@@ -111,7 +111,7 @@ func verifySignatureAtTime(p7 *PKCS7, signer signerInfo, truststore *x509.CertPo
 	return ee.CheckSignature(sigalg, signedData, signer.EncryptedDigest)
 }
 
-func verifySignature(p7 *PKCS7, signer signerInfo, truststore *x509.CertPool) (err error) {
+func verifySignature(p7 *PKCS7, signer signerInfo, opts x509.VerifyOptions) (err error) {
 	signedData := p7.Content
 	ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 	if ee == nil {
@@ -153,10 +153,11 @@ func verifySignature(p7 *PKCS7, signer signerInfo, truststore *x509.CertPool) (e
 			}
 		}
 	}
-	if truststore != nil {
-		_, err = verifyCertChain(ee, p7.Certificates, truststore, signingTime)
+	if opts.Roots != nil {
+		opts.CurrentTime = signingTime
+		_, err = ee.Verify(opts)
 		if err != nil {
-			return err
+			return fmt.Errorf("pkcs7: failed to verify certificate chain: %v", err)
 		}
 	}
 	sigalg, err := getSignatureAlgorithm(signer.DigestEncryptionAlgorithm, signer.DigestAlgorithm)
@@ -226,29 +227,6 @@ func parseSignedData(data []byte) (*PKCS7, error) {
 		CRLs:         sd.CRLs,
 		Signers:      sd.SignerInfos,
 		raw:          sd}, nil
-}
-
-// verifyCertChain takes an end-entity certs, a list of potential intermediates and a
-// truststore, and built all potential chains between the EE and a trusted root.
-//
-// When verifying chains that may have expired, currentTime can be set to a past date
-// to allow the verification to pass. If unset, currentTime is set to the current UTC time.
-func verifyCertChain(ee *x509.Certificate, certs []*x509.Certificate, truststore *x509.CertPool, currentTime time.Time) (chains [][]*x509.Certificate, err error) {
-	intermediates := x509.NewCertPool()
-	for _, intermediate := range certs {
-		intermediates.AddCert(intermediate)
-	}
-	verifyOptions := x509.VerifyOptions{
-		Roots:         truststore,
-		Intermediates: intermediates,
-		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
-		CurrentTime:   currentTime,
-	}
-	chains, err = ee.Verify(verifyOptions)
-	if err != nil {
-		return chains, fmt.Errorf("pkcs7: failed to verify certificate chain: %v", err)
-	}
-	return
 }
 
 // MessageDigestMismatchError is returned when the signer data digest does not

@@ -33,8 +33,13 @@ func TestSign(t *testing.T) {
 		if err != nil {
 			t.Fatalf("test %s: cannot generate root cert: %s", sigalgroot, err)
 		}
+
 		truststore := x509.NewCertPool()
 		truststore.AddCert(rootCert.Certificate)
+		opts := x509.VerifyOptions{
+			Roots: truststore,
+		}
+
 		for _, sigalginter := range sigalgs {
 			interCert, err := createTestCertificateByIssuer("PKCS7 Test Intermediate Cert", rootCert, sigalginter, true)
 			if err != nil {
@@ -79,7 +84,7 @@ func TestSign(t *testing.T) {
 					if !bytes.Equal(content, p7.Content) {
 						t.Errorf("test %s/%s/%s: content was not found in the parsed data:\n\tExpected: %s\n\tActual: %s", sigalgroot, sigalginter, sigalgsigner, content, p7.Content)
 					}
-					if err := p7.VerifyWithChain(truststore); err != nil {
+					if err := p7.VerifyWithChain(opts); err != nil {
 						t.Errorf("test %s/%s/%s: cannot verify signed data: %s", sigalgroot, sigalginter, sigalgsigner, err)
 					}
 					if !signerDigest.Equal(p7.Signers[0].DigestAlgorithm.Algorithm) {
@@ -175,8 +180,13 @@ func TestSignWithoutAttributes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("test %s: cannot generate root cert: %s", sigalgroot, err)
 		}
+
 		truststore := x509.NewCertPool()
 		truststore.AddCert(rootCert.Certificate)
+		opts := x509.VerifyOptions{
+			Roots: truststore,
+		}
+
 		for _, sigalgsigner := range sigalgs {
 			signerCert, err := createTestCertificateByIssuer("PKCS7 Test Signer Cert", rootCert, sigalgsigner, false)
 			if err != nil {
@@ -214,7 +224,7 @@ func TestSignWithoutAttributes(t *testing.T) {
 				if !bytes.Equal(content, p7.Content) {
 					t.Errorf("test %s/%s: content was not found in the parsed data:\n\tExpected: %s\n\tActual: %s", sigalgroot, sigalgsigner, content, p7.Content)
 				}
-				if err := p7.VerifyWithChain(truststore); err != nil {
+				if err := p7.VerifyWithChain(opts); err != nil {
 					t.Errorf("test %s/%s: cannot verify signed data: %s", sigalgroot, sigalgsigner, err)
 				}
 				if !signerDigest.Equal(p7.Signers[0].DigestAlgorithm.Algorithm) {
