@@ -14,7 +14,7 @@ import (
 // trust store, effectively disabling certificate verification when validating
 // a signature.
 func (p7 *PKCS7) Verify() (err error) {
-	return p7.VerifyWithChain(x509.VerifyOptions{})
+	return p7.VerifyWithChain(nil)
 }
 
 // VerifyWithChain checks the signatures of a PKCS7 object.
@@ -22,18 +22,20 @@ func (p7 *PKCS7) Verify() (err error) {
 // If truststore is not nil, it also verifies the chain of trust of
 // the end-entity signer cert to one of the roots in the
 // truststore. When the PKCS7 object includes the signing time
-// authenticated attr verifies the chain at that time and UTC now
+// authenticated attr it verifies the chain at that time and UTC now
 // otherwise.
-func (p7 *PKCS7) VerifyWithChain(opts x509.VerifyOptions) (err error) {
-	if len(p7.Signers) == 0 {
-		return errors.New("pkcs7: Message has no signers")
+func (p7 *PKCS7) VerifyWithChain(truststore *x509.CertPool) (err error) {
+	intermediates := x509.NewCertPool()
+	for _, cert := range(p7.Certificates) {
+		intermediates.AddCert(cert)
 	}
-	for _, signer := range p7.Signers {
-		if err := verifySignature(p7, signer, opts); err != nil {
-			return err
-		}
+
+	opts := x509.VerifyOptions{
+		Roots: truststore,
+		Intermediates: intermediates,
 	}
-	return nil
+
+	return p7.VerifyWithOpts(opts)
 }
 
 // VerifyWithChainAtTime checks the signatures of a PKCS7 object.
@@ -42,12 +44,39 @@ func (p7 *PKCS7) VerifyWithChain(opts x509.VerifyOptions) (err error) {
 // the end-entity signer cert to a root in the truststore at
 // currentTime. It does not use the signing time authenticated
 // attribute.
-func (p7 *PKCS7) VerifyWithChainAtTime(opts x509.VerifyOptions) (err error) {
+func (p7 *PKCS7) VerifyWithChainAtTime(truststore *x509.CertPool, currentTime time.Time) (err error) {
+	intermediates := x509.NewCertPool()
+	for _, cert := range(p7.Certificates) {
+		intermediates.AddCert(cert)
+	}
+
+	opts := x509.VerifyOptions{
+		Roots: truststore,
+		Intermediates: intermediates,
+		CurrentTime: currentTime,
+	}
+
+	return p7.VerifyWithOpts(opts)
+}
+
+// VerifyWithOpts checks the signatures of a PKCS7 object.
+//
+// It accepts x509.VerifyOptions as a parameter.
+// This struct contains a root certificate pool, an intermedate certificate pool, 
+// an optional list of EKUs, and an optional time that certificates should be
+// checked as being valid during.
+
+// If VerifyOpts.Roots is not nil it verifies the chain of trust of
+// the end-entity signer cert to one of the roots in the
+// truststore. When the PKCS7 object includes the signing time
+// authenticated attr it verifies the chain at that time and UTC now
+// otherwise.
+func (p7 *PKCS7) VerifyWithOpts(opts x509.VerifyOptions) (err error) {
 	if len(p7.Signers) == 0 {
 		return errors.New("pkcs7: Message has no signers")
 	}
 	for _, signer := range p7.Signers {
-		if err := verifySignatureAtTime(p7, signer, opts); err != nil {
+		if err := verifySignature(p7, signer, opts); err != nil {
 			return err
 		}
 	}
