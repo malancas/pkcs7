@@ -872,3 +872,107 @@ func TestVerifySignatureWithCertPools_CannotVerifySignature(t *testing.T) {
 		t.Fatalf("Expected verification to fail: %v", err)
 	}
 }
+
+func TestPKCS7VerifyWithCertPools_Success(t *testing.T) {
+	certChain, err := createCertChain(x509.SHA256WithRSA)
+	if err != nil {
+		t.Fatalf("failed to create cert chain: %v", err)
+	}
+
+	rootsPool := x509.NewCertPool()
+	rootsPool.AddCert(certChain.root.Certificate)
+
+	intermediatesPool := x509.NewCertPool()
+	intermediatesPool.AddCert(certChain.intermediate.Certificate)
+	
+	pools := certPools{
+		Roots: rootsPool,
+		Intermediates: intermediatesPool,
+	}
+
+	data := []byte("blob")
+	signed, err := createSignedData(data, certChain.leaf)
+	if err != nil {
+		t.Fatalf("failed to create signed data: %v", err)
+	}
+
+	p7, err := Parse(signed)
+	if err != nil {
+		t.Fatalf("failed to create PKCS7 object from signed data: %v", err)
+	}
+
+	err = p7.VerifyWithCertPools(pools, certChain.leaf.Certificate, 0)
+	if err != nil {
+		t.Fatalf("expected VerifyWithCertPools to succeed: %v", err)
+	}
+}
+
+func TestPKCS7VerifyWithCertPools_NoSigners(t *testing.T) {
+	certChain, err := createCertChain(x509.SHA256WithRSA)
+	if err != nil {
+		t.Fatalf("failed to create cert chain: %v", err)
+	}
+
+	rootsPool := x509.NewCertPool()
+	rootsPool.AddCert(certChain.root.Certificate)
+
+	intermediatesPool := x509.NewCertPool()
+	intermediatesPool.AddCert(certChain.intermediate.Certificate)
+	
+	pools := certPools{
+		Roots: rootsPool,
+		Intermediates: intermediatesPool,
+	}
+
+	data := []byte("blob")
+	signed, err := createSignedData(data, certChain.leaf)
+	if err != nil {
+		t.Fatalf("failed to create signed data: %v", err)
+	}
+
+	p7, err := Parse(signed)
+	if err != nil {
+		t.Fatalf("failed to create PKCS7 object from signed data: %v", err)
+	}
+
+	p7.Signers = nil
+	err = p7.VerifyWithCertPools(pools, certChain.leaf.Certificate, 0)
+	if err != ErrNoSigners {
+		t.Fatalf("expected VerifyWithCertPools to fail: %v", err)
+	}
+}
+
+func TestPKCS7VerifyWithCertPools_MissingEKU(t *testing.T) {
+	certChain, err := createCertChain(x509.SHA256WithRSA)
+	if err != nil {
+		t.Fatalf("failed to create cert chain: %v", err)
+	}
+
+	rootsPool := x509.NewCertPool()
+	rootsPool.AddCert(certChain.root.Certificate)
+
+	intermediatesPool := x509.NewCertPool()
+	intermediatesPool.AddCert(certChain.intermediate.Certificate)
+	
+	pools := certPools{
+		Roots: rootsPool,
+		Intermediates: intermediatesPool,
+	}
+
+	data := []byte("blob")
+	signed, err := createSignedData(data, certChain.leaf)
+	if err != nil {
+		t.Fatalf("failed to create signed data: %v", err)
+	}
+
+	p7, err := Parse(signed)
+	if err != nil {
+		t.Fatalf("failed to create PKCS7 object from signed data: %v", err)
+	}
+
+	p7.Signers = nil
+	err = p7.VerifyWithCertPools(pools, certChain.leaf.Certificate, x509.ExtKeyUsageCodeSigning)
+	if err == nil {
+		t.Fatalf("expected VerifyWithCertPools to fail: %v", err)
+	}
+}
