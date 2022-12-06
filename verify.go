@@ -72,6 +72,11 @@ func (p7 *PKCS7) VerifyWithChainAtTime(truststore *x509.CertPool, currentTime ti
 // authenticated attr it verifies the chain at that time and UTC now
 // otherwise.
 func (p7 *PKCS7) VerifyWithOpts(opts x509.VerifyOptions) (err error) {
+	// if KeyUsage isn't set, default to ExtKeyUsageAny
+	if opts.KeyUsages == nil {
+		opts.KeyUsages = []x509.ExtKeyUsage{x509.ExtKeyUsageAny}
+	}
+
 	if len(p7.Signers) == 0 {
 		return errors.New("pkcs7: Message has no signers")
 	}
