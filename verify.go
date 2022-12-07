@@ -80,8 +80,21 @@ func (p7 *PKCS7) VerifyWithOpts(opts x509.VerifyOptions) (err error) {
 	if len(p7.Signers) == 0 {
 		return errors.New("pkcs7: Message has no signers")
 	}
+
+	// if opts.CurrentTime is not set, call verifySignature,
+	// which will verify the leaf certificate with the current time
+	if opts.CurrentTime.IsZero() {
+		for _, signer := range p7.Signers {
+			if err := verifySignature(p7, signer, opts); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	// if opts.CurrentTime is set, call verifySignatureAtTime,
+	// which will verify the leaf certificate with opts.CurrentTime
 	for _, signer := range p7.Signers {
-		if err := verifySignature(p7, signer, opts); err != nil {
+		if err := verifySignatureAtTime(p7, signer, opts); err != nil {
 			return err
 		}
 	}
