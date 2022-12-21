@@ -12,9 +12,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
-	"log"
 	"math/big"
-	"os"
 	"time"
 )
 
@@ -283,7 +281,6 @@ func createTestCertificateByIssuer(name string, issuer *certKeyPair, sigAlg x509
 		issuerKey = priv
 	}
 
-	log.Println("creating cert", name, "issued by", issuerCert.Subject.CommonName, "with sigalg", sigAlg)
 	switch priv.(type) {
 	case *rsa.PrivateKey:
 		switch issuerKey := issuerKey.(type) {
@@ -341,7 +338,6 @@ func createTestCertificateByIssuer(name string, issuer *certKeyPair, sigAlg x509
 	if err != nil {
 		return nil, err
 	}
-	pem.Encode(os.Stdout, &pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
 	return &certKeyPair{
 		Certificate: cert,
 		PrivateKey:  &priv,
