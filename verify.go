@@ -133,8 +133,7 @@ func (p7 *PKCS7) VerifyWithOpts(opts x509.VerifyOptions) (err error) {
 	// if opts.CurrentTime is set, call verifySignatureAtTime,
 	// which will verify the leaf certificate with opts.CurrentTime
 	for _, signer := range p7.Signers {
-		// (ee *x509.Certificate, p7 *PKCS7, signer signerInfo, truststore *x509.CertPool, currentTime time.Time)
-		if err := verifySignatureAtTime(p7, signer, truststore, currentTime); err != nil {
+		if err := verifySignatureAtTime(p7, signer, opts); err != nil {
 			return err
 		}
 	}
@@ -149,40 +148,44 @@ func (p7 *PKCS7) VerifyWithOpts(opts x509.VerifyOptions) (err error) {
 // authenticated attribute. If an optional leaf certificate and EKU are 
 // provided, it will also check the presence  of the EKU in the certificate 
 // and verify the leaf certificate signature.
-func (p7 *PKCS7) VerifyWithCertPools(pools certPools, leafCert *x509.Certificate, eku x509.ExtKeyUsage) (err error) {
-	if len(p7.Signers) == 0 {
-		return ErrNoSigners
-	}
-	if leafCert != nil {
-		if eku != 0 {
-			err := verifyEKU(leafCert, eku)
-			if err != nil {
-				return err
-			}
-		}
-		for _, signer := range p7.Signers {
-			if !isCertMatchForIssuerAndSerial(leafCert, signer.IssuerAndSerialNumber) {
-				return ErrCertificateMatchedToSigner
-			}
-			signingTime := time.Now().UTC()
-			if err := verifySignatureWithCertPools(leafCert, p7, signer, pools, signingTime); err != nil {
-				return err
-			}
-		}
-	}
-	for _, signer := range p7.Signers {
-		ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
-		if ee == nil {
-			return ErrNoCertificateForSigner
-		}
-		
-		signingTime := time.Now().UTC()
-		if err := verifySignatureWithCertPools(ee, p7, signer, pools, signingTime); err != nil {
-			return err
-		}
-	}
-	return nil
-}
+// func (p7 *PKCS7) VerifyWithCertPools(pools certPools, leafCert *x509.Certificate, eku x509.ExtKeyUsage) (err error) {
+// 	if len(p7.Signers) == 0 {
+// 		return ErrNoSigners
+// 	}
+// 	if leafCert != nil {
+// 		if eku != 0 {
+// 			err := verifyEKU(leafCert, eku)
+// 			if err != nil {
+// 				return err
+// 			}
+// 		}
+// 		for _, signer := range p7.Signers {
+// 			if !isCertMatchForIssuerAndSerial(leafCert, signer.IssuerAndSerialNumber) {
+// 				return ErrCertificateMatchedToSigner
+// 			}
+// 			signingTime := time.Now().UTC()
+// 			if err := verifySignatureWithCertPools(leafCert, p7, signer, pools, signingTime); err != nil {
+// 				return err
+// 			}
+// 		}
+// 	}
+// 	for _, signer := range p7.Signers {
+// 		ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
+// 		if ee == nil {
+// 			return ErrNoCertificateForSigner
+// 		}
+
+// 		opts := x509.VerifyOptions{
+// 			Roots: pools.Roots,
+// 			Intermediates: pools.Intermediates,
+// 			CurrentTime: time.Now().UTC(),
+// 		}
+// 		if err := verifySignatureWithCertPools(ee, p7, signer, opts); err != nil {
+// 			return err
+// 		}
+// 	}
+// 	return nil
+// }
 
 func verifyEKU(cert *x509.Certificate, expectedEKU x509.ExtKeyUsage) error {
 	var found bool
@@ -198,7 +201,6 @@ func verifyEKU(cert *x509.Certificate, expectedEKU x509.ExtKeyUsage) error {
 }
 
 func verifySignatureAtTime(p7 *PKCS7, signer signerInfo, opts x509.VerifyOptions) (err error) {
-	signedData := p7.Content
 	ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 	if ee == nil {
 		return errors.New("pkcs7: No certificate for signer")
@@ -208,13 +210,8 @@ func verifySignatureAtTime(p7 *PKCS7, signer signerInfo, opts x509.VerifyOptions
 	if err != nil {
 		return err
 	}
-	signingTime, err := verifySignedTime(ee, signer)
-	if err != nil {
-		return err
-	}
 
 	if opts.Roots != nil {
-		// _, err = verifyCertChain(ee, pools, signingTime)
 		_, err = ee.Verify(opts)
 		if err != nil {
 			return fmt.Errorf("pkcs7: failed to verify certificate chain: %v", err)
@@ -228,7 +225,6 @@ func verifySignatureAtTime(p7 *PKCS7, signer signerInfo, opts x509.VerifyOptions
 }
 
 func verifySignature(p7 *PKCS7, signer signerInfo, opts x509.VerifyOptions) (err error) {
-	signedData := p7.Content
 	ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 	if ee == nil {
 		return errors.New("pkcs7: No certificate for signer")
@@ -243,8 +239,6 @@ func verifySignature(p7 *PKCS7, signer signerInfo, opts x509.VerifyOptions) (err
 	}
 
 	if opts.Roots != nil {
-		opts.CurrentTime = signingTime
-		// _, err = verifyCertChain(ee, pools, currentTime)
 		_, err = ee.Verify(opts)
 		if err != nil {
 			return fmt.Errorf("pkcs7: failed to verify certificate chain: %v", err)
