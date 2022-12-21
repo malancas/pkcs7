@@ -298,6 +298,7 @@ func TestVerifyFirefoxAddon(t *testing.T) {
 	if err = p7.VerifyWithChainAtTime(certPool, expiredTime); err == nil {
 		t.Errorf("Verify at expired time %s did not error", expiredTime)
 	}
+
 	notYetValidTime := time.Date(1999, time.July, 5, 0, 13, 0, 0, time.UTC)
 	if err = p7.VerifyWithChainAtTime(certPool, notYetValidTime); err == nil {
 		t.Errorf("Verify at not yet valid time %s did not error", notYetValidTime)
@@ -309,14 +310,20 @@ func TestVerifyFirefoxAddon(t *testing.T) {
 	if ee == nil {
 		t.Errorf("No end-entity certificate found for signer")
 	}
-	signingTime := mustParseTime("2017-02-23T09:06:16-05:00")
 
-	intermediates := buildCertPool(p7.Certificates)
-	pools := certPools {
+	opts := x509.VerifyOptions{
 		Roots: certPool,
-		Intermediates: intermediates,
+		CurrentTime: mustParseTime("2017-02-23T09:06:16-05:00"),
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
 	}
-	chains, err := verifyCertChain(ee, pools, signingTime)
+
+	intermediates := x509.NewCertPool()
+	for _, cert := range(p7.Certificates) {
+		intermediates.AddCert(cert)
+	}
+	opts.Intermediates = intermediates
+
+	chains, err := ee.Verify(opts)
 	if err != nil {
 		t.Error(err)
 	}
@@ -607,12 +614,19 @@ but that's not what ships are built for.
 					t.Fatalf("No end-entity certificate found for signer")
 				}
 
-				intermediates := buildCertPool(p7.Certificates)
-				pools := certPools {
+				opts := x509.VerifyOptions{
 					Roots: truststore,
-					Intermediates: intermediates,
+					CurrentTime: time.Now(),
+					KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
 				}
-				chains, err := verifyCertChain(ee, pools, time.Now())
+
+				intermediates := x509.NewCertPool()
+				for _, cert := range(p7.Certificates) {
+					intermediates.AddCert(cert)
+				}
+				opts.Intermediates = intermediates
+			
+				chains, err := ee.Verify(opts)
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -66,7 +66,6 @@ func TestSign(t *testing.T) {
 					if err != nil {
 						t.Fatalf("test %s/%s/%s: cannot finish signing data: %s", sigalgroot, sigalginter, sigalgsigner, err)
 					}
-
 					p7, err := Parse(signed)
 					if err != nil {
 						t.Fatalf("test %s/%s/%s: cannot parse signed data: %s", sigalgroot, sigalginter, sigalgsigner, err)
@@ -200,7 +199,6 @@ func TestSignWithoutAttributes(t *testing.T) {
 				if err != nil {
 					t.Fatalf("test %s/%s: cannot finish signing data: %s", sigalgroot, sigalgsigner, err)
 				}
-
 				p7, err := Parse(signed)
 				if err != nil {
 					t.Fatalf("test %s/%s: cannot parse signed data: %s", sigalgroot, sigalgsigner, err)

@@ -338,7 +338,6 @@ func createTestCertificateByIssuer(name string, issuer *certKeyPair, sigAlg x509
 	if err != nil {
 		return nil, err
 	}
-
 	return &certKeyPair{
 		Certificate: cert,
 		PrivateKey:  &priv,
