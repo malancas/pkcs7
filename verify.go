@@ -130,19 +130,6 @@ func (p7 *PKCS7) VerifyWithOpts(opts x509.VerifyOptions) (err error) {
 	return nil
 }
 
-func verifyEKU(cert *x509.Certificate, expectedEKU x509.ExtKeyUsage) error {
-	var found bool
-	for _, eku := range cert.ExtKeyUsage {
-		if eku == expectedEKU {
-			found = true
-		}
-	}
-	if !found {
-		return errors.New(fmt.Sprintf("certificate must set EKU to %d", expectedEKU))
-	}
-	return nil
-}
-
 func verifySignatureAtTime(p7 *PKCS7, signer signerInfo, opts x509.VerifyOptions) (err error) {
 	ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 	if ee == nil {
@@ -316,17 +303,6 @@ func verifyCertChain(ee *x509.Certificate, pools certPools, currentTime time.Tim
 		return chains, fmt.Errorf("pkcs7: failed to verify certificate chain: %v", err)
 	}
 	return chains, err
-}
-
-// MessageDigestMismatchError is returned when the signer data digest does not
-// match the computed digest for the contained content
-type MessageDigestMismatchError struct {
-	ExpectedDigest []byte
-	ActualDigest   []byte
-}
-
-func (err *MessageDigestMismatchError) Error() string {
-	return fmt.Sprintf("pkcs7: Message digest mismatch\n\tExpected: %X\n\tActual  : %X", err.ExpectedDigest, err.ActualDigest)
 }
 
 func getSignatureAlgorithm(digestEncryption, digest pkix.AlgorithmIdentifier) (x509.SignatureAlgorithm, error) {
