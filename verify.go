@@ -44,11 +44,6 @@ func (err *ErrSigningTimeNotValid) Error() string {
 		err.notAfter.Format(time.RFC3339))
 }
 
-type certPools struct {
-	Roots *x509.CertPool
-	Intermediates *x509.CertPool
-}
-
 // Verify is a wrapper around VerifyWithChain() that initializes an empty
 // trust store, effectively disabling certificate verification when validating
 // a signature.
@@ -91,7 +86,7 @@ func (p7 *PKCS7) VerifyWithChainAtTime(truststore *x509.CertPool, currentTime ti
 // VerifyWithOpts checks the signatures of a PKCS7 object.
 //
 // It accepts x509.VerifyOptions as a parameter.
-// This struct contains a root certificate pool, an intermedate certificate pool, 
+// This struct contains a root certificate pool, an intermediate certificate pool, 
 // an optional list of EKUs, and an optional time that certificates should be
 // checked as being valid during.
 
@@ -284,25 +279,6 @@ func parseSignedData(data []byte) (*PKCS7, error) {
 		CRLs:         sd.CRLs,
 		Signers:      sd.SignerInfos,
 		raw:          sd}, nil
-}
-
-// verifyCertChain takes an end-entity certs, a list of potential intermediates and a
-// truststore, and built all potential chains between the EE and a trusted root.
-//
-// When verifying chains that may have expired, currentTime can be set to a past date
-// to allow the verification to pass. If unset, currentTime is set to the current UTC time.
-func verifyCertChain(ee *x509.Certificate, pools certPools, currentTime time.Time) (chains [][]*x509.Certificate, err error) {
-	verifyOptions := x509.VerifyOptions{
-		Roots:         pools.Roots,
-		Intermediates: pools.Intermediates,
-		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
-		CurrentTime:   currentTime,
-	}
-	chains, err = ee.Verify(verifyOptions)
-	if err != nil {
-		return chains, fmt.Errorf("pkcs7: failed to verify certificate chain: %v", err)
-	}
-	return chains, err
 }
 
 func getSignatureAlgorithm(digestEncryption, digest pkix.AlgorithmIdentifier) (x509.SignatureAlgorithm, error) {

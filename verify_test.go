@@ -747,7 +747,6 @@ func TestVerifySignedData_Success(t *testing.T) {
 	fixture := UnmarshalTestFixture(SignedTestFixture)
 	p7, err := Parse(fixture.Input)
 	signer := p7.Signers[0]
-	// ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 
 	signedData, err := verifySignedData(p7.Content, signer)
 	if err != nil {
@@ -777,7 +776,7 @@ func TestVerifySignature_SelfSigned_Success(t *testing.T) {
 	}
 }
 
-func TestVerifySignatureWithCertPools_Success(t *testing.T) {
+func TestVerifySignature_Success(t *testing.T) {
 	certChain, err := createCertChain(x509.SHA256WithRSA)
 	if err != nil {
 		t.Fatalf("failed to create cert chain: %v", err)
@@ -812,7 +811,7 @@ func TestVerifySignatureWithCertPools_Success(t *testing.T) {
 	}
 }
 
-func TestVerifySignatureWithCertPools_CannotVerifyCertChain(t *testing.T) {
+func TestVerifySignature_CannotVerifyCertChain(t *testing.T) {
 	certChain, err := createCertChain(x509.SHA256WithRSA)
 	if err != nil {
 		t.Fatalf("failed to create cert chain: %v", err)
@@ -849,7 +848,7 @@ func TestVerifySignatureWithCertPools_CannotVerifyCertChain(t *testing.T) {
 	}
 }
 
-func TestVerifySignatureWithCertPools_CannotVerifySignature(t *testing.T) {
+func TestVerifySignature_CannotVerifySignature(t *testing.T) {
 	certChain, err := createCertChain(x509.SHA256WithRSA)
 	if err != nil {
 		t.Fatalf("failed to create cert chain: %v", err)
@@ -892,7 +891,7 @@ func TestVerifySignatureWithCertPools_CannotVerifySignature(t *testing.T) {
 	}
 }
 
-func TestPKCS7VerifyWithCertPools_Success(t *testing.T) {
+func TestPKCS7VerifyWithOpts_Success(t *testing.T) {
 	certChain, err := createCertChain(x509.SHA256WithRSA)
 	if err != nil {
 		t.Fatalf("failed to create cert chain: %v", err)
@@ -923,11 +922,11 @@ func TestPKCS7VerifyWithCertPools_Success(t *testing.T) {
 
 	// err = p7.VerifyWithCertPools(pools, certChain.leaf.Certificate, 0)
 	if err != nil {
-		t.Fatalf("expected VerifyWithCertPools to succeed: %v", err)
+		t.Fatalf("expected VerifyWithOpts to succeed: %v", err)
 	}
 }
 
-func TestPKCS7VerifyWithCertPools_NoSigners(t *testing.T) {
+func TestPKCS7VerifyWithOpts_NoSigners(t *testing.T) {
 	certChain, err := createCertChain(x509.SHA256WithRSA)
 	if err != nil {
 		t.Fatalf("failed to create cert chain: %v", err)
@@ -958,11 +957,11 @@ func TestPKCS7VerifyWithCertPools_NoSigners(t *testing.T) {
 	}
 	err = p7.VerifyWithOpts(opts)
 	if err != ErrNoSigners {
-		t.Fatalf("expected VerifyWithCertPools to fail: %v", err)
+		t.Fatalf("expected VerifyWithOpts to fail with ErrNoSigners: %v", err)
 	}
 }
 
-func TestPKCS7VerifyWithCertPools_MissingEKU(t *testing.T) {
+func TestPKCS7VerifyWithOpts_MissingEKU(t *testing.T) {
 	certChain, err := createCertChain(x509.SHA256WithRSA)
 	if err != nil {
 		t.Fatalf("failed to create cert chain: %v", err)
@@ -990,11 +989,10 @@ func TestPKCS7VerifyWithCertPools_MissingEKU(t *testing.T) {
 	opts := x509.VerifyOptions{
 		Roots: rootsPool,
 		Intermediates: intermediatesPool,
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageCodeSigning},
 	}
 	err = p7.VerifyWithOpts(opts)
-
-	// err = p7.VerifyWithCertPools(pools, certChain.leaf.Certificate, x509.ExtKeyUsageCodeSigning)
 	if err == nil {
-		t.Fatalf("expected VerifyWithCertPools to fail: %v", err)
+		t.Fatalf("expected VerifyWithOpts to fail: %v", err)
 	}
 }
