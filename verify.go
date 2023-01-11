@@ -33,12 +33,12 @@ func (err *ErrMessageDigestMismatch) Error() string {
 // within the validity time of the certificate
 type ErrSigningTimeNotValid struct {
 	signingTime time.Time
-	notBefore time.Time
-	notAfter  time.Time
+	notBefore   time.Time
+	notAfter    time.Time
 }
 
 func (err *ErrSigningTimeNotValid) Error() string {
-	return fmt.Sprintf("pkcs7: signing time %q is outside of certificate validity %q to %q", 
+	return fmt.Sprintf("pkcs7: signing time %q is outside of certificate validity %q to %q",
 		err.signingTime.Format(time.RFC3339),
 		err.notBefore.Format(time.RFC3339),
 		err.notAfter.Format(time.RFC3339))
@@ -70,14 +70,14 @@ func (p7 *PKCS7) VerifyWithChain(truststore *x509.CertPool) (err error) {
 // attribute.
 func (p7 *PKCS7) VerifyWithChainAtTime(truststore *x509.CertPool, currentTime time.Time) (err error) {
 	intermediates := x509.NewCertPool()
-	for _, cert := range(p7.Certificates) {
+	for _, cert := range p7.Certificates {
 		intermediates.AddCert(cert)
 	}
 
 	opts := x509.VerifyOptions{
-		Roots: truststore,
+		Roots:         truststore,
 		Intermediates: intermediates,
-		CurrentTime: currentTime,
+		CurrentTime:   currentTime,
 	}
 
 	return p7.VerifyWithOpts(opts)
@@ -86,7 +86,7 @@ func (p7 *PKCS7) VerifyWithChainAtTime(truststore *x509.CertPool, currentTime ti
 // VerifyWithOpts checks the signatures of a PKCS7 object.
 //
 // It accepts x509.VerifyOptions as a parameter.
-// This struct contains a root certificate pool, an intermediate certificate pool, 
+// This struct contains a root certificate pool, an intermediate certificate pool,
 // an optional list of EKUs, and an optional time that certificates should be
 // checked as being valid during.
 
@@ -149,6 +149,29 @@ func verifySignatureAtTime(p7 *PKCS7, signer signerInfo, opts x509.VerifyOptions
 	return ee.CheckSignature(sigalg, signedData, signer.EncryptedDigest)
 }
 
+func verifySignedTime(ee *x509.Certificate, signer signerInfo) (time.Time, error) {
+	signingTime := time.Now().UTC()
+
+	if len(signer.AuthenticatedAttributes) == 0 {
+		return signingTime, nil
+	}
+
+	err := unmarshalAttribute(signer.AuthenticatedAttributes, OIDAttributeSigningTime, &signingTime)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	// signing time found, performing validity check
+	if signingTime.After(ee.NotAfter) || signingTime.Before(ee.NotBefore) {
+		return time.Time{}, &ErrSigningTimeNotValid{
+			signingTime: signingTime,
+			notBefore:   ee.NotBefore,
+			notAfter:    ee.NotAfter,
+		}
+	}
+	return signingTime, nil
+}
+
 func verifySignature(p7 *PKCS7, signer signerInfo, opts x509.VerifyOptions) (err error) {
 	ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
 	if ee == nil {
@@ -168,7 +191,7 @@ func verifySignedData(p7Content []byte, signer signerInfo) ([]byte, error) {
 	if len(signer.AuthenticatedAttributes) == 0 {
 		return p7Content, nil
 	}
-	
+
 	// TODO(fullsailor): First check the content type match
 	var digest []byte
 
@@ -195,29 +218,6 @@ func verifySignedData(p7Content []byte, signer signerInfo) ([]byte, error) {
 	}
 
 	return signedData, nil
-}
-
-func verifySignedTime(ee *x509.Certificate, signer signerInfo) (time.Time, error) {
-	signingTime := time.Now().UTC()
-
-	if len(signer.AuthenticatedAttributes) == 0 {
-		return signingTime, nil
-	}
-
-	err := unmarshalAttribute(signer.AuthenticatedAttributes, OIDAttributeSigningTime, &signingTime)
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	// signing time found, performing validity check
-	if signingTime.After(ee.NotAfter) || signingTime.Before(ee.NotBefore) {
-		return time.Time{}, &ErrSigningTimeNotValid{
-			signingTime: signingTime,
-			notBefore: ee.NotBefore,
-			notAfter: ee.NotAfter,
-		}
-	}
-	return signingTime, nil
 }
 
 // GetOnlySigner returns an x509.Certificate for the first signer of the signed
