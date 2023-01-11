@@ -757,6 +757,106 @@ func TestVerifySignedData_Success(t *testing.T) {
 	}
 }
 
+func TestVerifySignature(t *testing.T) {
+	// create a certificate chain for testing
+	certChain, err := createCertChain(x509.SHA256WithRSA)
+	if err != nil {
+		t.Fatalf("failed to create cert chain: %v", err)
+	}
+
+	// create the default root pool, a root poo containing a certificate
+	// not connected to the certificate chain, and the intermediate
+	// certificate pool
+	rootsPool := x509.NewCertPool()
+	rootsPool.AddCert(certChain.root.Certificate)
+
+	unconnectedRootPool := x509.NewCertPool()
+	unconnectedCert := x509.Certificate{}
+	unconnectedRootPool.AddCert(&unconnectedCert)
+
+	intermediatesPool := x509.NewCertPool()
+	intermediatesPool.AddCert(certChain.intermediate.Certificate)
+
+	// create the signed data
+	data := []byte("blob")
+
+	signed, err := createSignedData(data, certChain.leaf)
+	if err != nil {
+		t.Fatalf("failed to create signed data: %v", err)
+	}
+
+	p7, err := Parse(signed)
+	if err != nil {
+		t.Fatalf("failed to parse pkcs7 structure from signed data: %v", err)
+	}
+	signer := p7.Signers[0]
+
+	
+	diffSignaturePair, err := createTestCertificate(x509.SHA512WithRSA)
+	if err != nil {
+		t.Fatalf("failed to create cert and key pair: %v", err)
+	}
+
+	signedDiffSignatureSigned, err := createSignedData(data, &diffSignaturePair)
+	diffP7, err := Parse(signedDiffSignatureSigned)
+	if err != nil {
+		t.Fatalf("failed to parse pkcs7 structure from signed data: %v", err)
+	}
+	diffSigner := diffP7.Signers[0]
+
+	testCases := []struct {
+		name string
+        roots  *x509.CertPool
+		intermediates *x509.CertPool
+		keyUsages []x509.ExtKeyUsage
+        signer signerInfo
+		p7 *PKCS7
+        expectTestPass bool
+    }{
+        {
+			name: "Success",
+			roots: rootsPool,
+			intermediates: intermediatesPool,
+			keyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageEmailProtection},
+			signer: signer,
+			p7: p7,
+			expectTestPass: true,
+		},
+		{
+			name: "CannotVerifyCertChain",
+			roots: unconnectedRootPool,
+			intermediates: intermediatesPool,
+			keyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageEmailProtection},
+			signer: signer,
+			p7: p7,
+			expectTestPass: false,
+		},
+		{
+			name: "CannotVerifySignature",
+			roots: rootsPool,
+			intermediates: intermediatesPool,
+			keyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageEmailProtection},
+			signer: diffSigner,
+			p7: diffP7,
+			expectTestPass: false,
+		},
+    }
+    for _, tc := range testCases {
+		opts := x509.VerifyOptions{
+			CurrentTime: time.Now(),
+			Roots: tc.roots,
+			Intermediates: tc.intermediates,
+			KeyUsages: tc.keyUsages,
+		}
+		err = verifySignature(tc.p7, tc.signer, opts)
+		if tc.expectTestPass && err != nil {
+			t.Fatalf("test '%s' unexpectedly failed. Expected err to be nil: %v", tc.name, err)
+		} else if !tc.expectTestPass && err == nil {
+			t.Fatalf("test '%s' unexpectedly passed. Expected err not to be nil", tc.name)
+		}
+	}
+}
+
 func TestVerifySignature_SelfSigned_Success(t *testing.T) {
 	fixture := UnmarshalTestFixture(SignedTestFixture)
 	p7, err := Parse(fixture.Input)
@@ -773,121 +873,6 @@ func TestVerifySignature_SelfSigned_Success(t *testing.T) {
 	err = verifySignature(p7, signer, opts)
 	if err != nil {
 		t.Fatalf("Expected err to be nil: %v", err)
-	}
-}
-
-func TestVerifySignature_Success(t *testing.T) {
-	certChain, err := createCertChain(x509.SHA256WithRSA)
-	if err != nil {
-		t.Fatalf("failed to create cert chain: %v", err)
-	}
-
-	rootsPool := x509.NewCertPool()
-	rootsPool.AddCert(certChain.root.Certificate)
-
-	intermediatesPool := x509.NewCertPool()
-	intermediatesPool.AddCert(certChain.intermediate.Certificate)
-
-	data := []byte("blob")
-	signed, err := createSignedData(data, certChain.leaf)
-	if err != nil {
-		t.Fatalf("failed to create signed data: %v", err)
-	}
-
-	p7, err := Parse(signed)
-	if err != nil {
-		t.Fatalf("failed to parse pkcs7 structure from signed data: %v", err)
-	}
-
-	signer := p7.Signers[0]
-	opts := x509.VerifyOptions{
-		CurrentTime: time.Now(),
-		Roots: rootsPool,
-		Intermediates: intermediatesPool,
-	}
-	err = verifySignature(p7, signer, opts)
-	if err != nil {	
-		t.Fatalf("Expected err to be nil: %v", err)
-	}
-}
-
-func TestVerifySignature_CannotVerifyCertChain(t *testing.T) {
-	certChain, err := createCertChain(x509.SHA256WithRSA)
-	if err != nil {
-		t.Fatalf("failed to create cert chain: %v", err)
-	}
-
-	rootsPool := x509.NewCertPool()
-	unconnectedCert := x509.Certificate{}
-	rootsPool.AddCert(&unconnectedCert)
-
-	intermediatesPool := x509.NewCertPool()
-	intermediatesPool.AddCert(certChain.intermediate.Certificate)
-
-	data := []byte("blob")
-	signed, err := createSignedData(data, certChain.leaf)
-	if err != nil {
-		t.Fatalf("failed to create signed data: %v", err)
-	}
-
-	p7, err := Parse(signed)
-	if err != nil {
-		t.Fatalf("failed to parse pkcs7 structure from signed data: %v", err)
-	}
-
-	signer := p7.Signers[0]
-
-	opts := x509.VerifyOptions{
-		CurrentTime: time.Now(),
-		Roots: rootsPool,
-		Intermediates: intermediatesPool,
-	}
-	err = verifySignature(p7, signer, opts)
-	if err == nil {	
-		t.Fatalf("Expected verification to fail: %v", err)
-	}
-}
-
-func TestVerifySignature_CannotVerifySignature(t *testing.T) {
-	certChain, err := createCertChain(x509.SHA256WithRSA)
-	if err != nil {
-		t.Fatalf("failed to create cert chain: %v", err)
-	}
-
-	rootsPool := x509.NewCertPool()
-	rootsPool.AddCert(certChain.root.Certificate)
-
-	intermediatesPool := x509.NewCertPool()
-	intermediatesPool.AddCert(certChain.intermediate.Certificate)
-
-	pair, err := createTestCertificate(x509.SHA512WithRSA)
-	if err != nil {
-		t.Fatalf("failed to create cert and key pair: %v", err)
-	}
-
-	data := []byte("blob")
-	signed, err := createSignedData(data, &pair)
-	if err != nil {
-		t.Fatalf("failed to create signed data: %v", err)
-	}
-
-	p7, err := Parse(signed)
-	if err != nil {
-		t.Fatalf("failed to parse pkcs7 structure from signed data: %v", err)
-	}
-
-	signer := p7.Signers[0]
-
-	opts := x509.VerifyOptions{
-		CurrentTime: time.Now(),
-		Roots: rootsPool,
-		Intermediates: intermediatesPool,
-	}
-	err = verifySignature(p7, signer, opts)
-	
-	// err = verifySignatureWithCertPools(certChain.leaf.Certificate, p7, signer, opts)
-	if err == nil {	
-		t.Fatalf("Expected verification to fail: %v", err)
 	}
 }
 
