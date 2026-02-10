@@ -14,16 +14,17 @@ import (
 	"testing"
 )
 
+var sigalgs = []x509.SignatureAlgorithm{
+	x509.SHA256WithRSA,
+	x509.SHA512WithRSA,
+	x509.ECDSAWithSHA256,
+	x509.ECDSAWithSHA384,
+	x509.ECDSAWithSHA512,
+	x509.PureEd25519,
+}
+
 func TestSign(t *testing.T) {
 	content := []byte("Hello World")
-	sigalgs := []x509.SignatureAlgorithm{
-		x509.SHA256WithRSA,
-		x509.SHA512WithRSA,
-		x509.ECDSAWithSHA256,
-		x509.ECDSAWithSHA384,
-		x509.ECDSAWithSHA512,
-		x509.PureEd25519,
-	}
 	for _, sigalgroot := range sigalgs {
 		rootCert, err := createTestCertificateByIssuer("PKCS7 Test Root CA", nil, sigalgroot, true)
 		if err != nil {
@@ -153,15 +154,7 @@ func TestDSASignAndVerifyWithOpenSSL(t *testing.T) {
 }
 
 func TestSignWithoutAttributes(t *testing.T) {
-	content := []byte("Hello World")
-	sigalgs := []x509.SignatureAlgorithm{
-		x509.SHA256WithRSA,
-		x509.SHA512WithRSA,
-		x509.ECDSAWithSHA256,
-		x509.ECDSAWithSHA384,
-		x509.ECDSAWithSHA512,
-		x509.PureEd25519,
-	}
+	content := []byte("Hello World")	
 	for _, sigalgroot := range sigalgs {
 		rootCert, err := createTestCertificateByIssuer("PKCS7 Test Root CA", nil, sigalgroot, true)
 		if err != nil {
